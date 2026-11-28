@@ -56,6 +56,7 @@ import {
   naoDisparadosTemporais,
 } from "@/lib/automation/gatilhos-de-tempo";
 import { autorizaCron } from "@/lib/auth/cron-auth";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -69,6 +70,28 @@ type Regra = {
 };
 
 type Candidato = { leadId: string; contactId: string | null; ancora: string };
+
+/**
+ * FORK MIA (MIA-369) — os tetos das duas leituras que antes iam sem `range`.
+ * Cada uma é lida INTEIRA, página a página (`lerTodasAsPaginas`), na ordem de
+ * `id`; acabou o teto sem prova de fim, a leitura falha FECHADA (nunca trata
+ * metade como tudo). Em 28/11/2026 a produção tinha 0 regras destes dois
+ * gatilhos e 0 linhas deles no `event_log` (10 regras na instalação inteira).
+ */
+/** As regras de silêncio e de etapa parada ativas da instalação: 20 mil é folga larga. */
+const PAGINAS_DAS_REGRAS = 20;
+/** A trava de UM lote de 100 negócios numa regra, já filtrada pela âncora mais antiga do lote. */
+const PAGINAS_DA_TRAVA = 20;
+/**
+ * Folga do recorte da trava por `created_at`. O aviso de uma âncora nasce
+ * DEPOIS dela (a âncora é um instante passado, gravado pelo banco, e o aviso só
+ * sai N dias depois), então nenhum aviso que importa tem `created_at` antes da
+ * âncora mais antiga do lote. Um dia a menos não muda a conta e cobre qualquer
+ * diferença de relógio.
+ */
+const FOLGA_DO_RECORTE_MS = 86_400_000;
+
+type AvisoAnterior = { entity_id: string; payload: unknown };
 
 /** A mesma divisão dos crons irmãos: lotes de 50, teto por organização. */
 function emLotes<T>(itens: T[], tamanho: number): T[][] {
@@ -87,30 +110,46 @@ async function handle(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   const agora = new Date();
 
-  const { data: regras, error: erroRegras } = await admin
-    .from("automation_rules")
-    .select("id, organization_id, trigger_event, trigger_config")
-    .in("trigger_event", [GATILHO_SILENCIO, GATILHO_ETAPA_PARADA])
-    .eq("is_active", true);
+  // FORK MIA (MIA-369) — as regras INTEIRAS, página a página, na ordem de `id`.
+  // Antes era uma leitura só, sem `range`: o PostgREST corta em 1000 linhas sem
+  // avisar, e a regra que ficasse fora da página nunca disparava.
+  const regras = await lerTodasAsPaginas<Regra>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("automation_rules")
+        .select("id, organization_id, trigger_event, trigger_config", pedirContagem ? { count: "exact" } : undefined)
+        .in("trigger_event", [GATILHO_SILENCIO, GATILHO_ETAPA_PARADA])
+        .eq("is_active", true)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DAS_REGRAS },
+  );
 
-  if (erroRegras) {
+  if (regras.erro || regras.truncado) {
     logger.error("[lead-time-triggers] consulta de regras falhou", {
-      error: erroRegras.message,
+      error: regras.erro ?? `leitura cortada: mais de ${regras.linhas.length} regras`,
       requestId,
     });
     return fail("internal_error", "Falha ao buscar regras.", 500, { requestId });
   }
 
-  const todasAsRegras = (regras ?? []) as Regra[];
+  const todasAsRegras = regras.linhas;
   if (todasAsRegras.length === 0) {
     return ok({ organizacoes: 0, regras: 0, examinados: 0, emitidos: 0, pulados: {} }, { requestId });
   }
 
   const orgsComRegra = [...new Set(todasAsRegras.map((r) => r.organization_id))];
-  const { data: organizacoes } = await admin
-    .from("organizations")
-    .select("id")
-    .in("id", orgsComRegra.slice(0, TAMANHO_DO_LOTE));
+  // FORK MIA (MIA-369) — TODAS as empresas com regra, em lotes de 100 (uma linha
+  // por id, então cada lote cabe numa resposta). Antes só o primeiro lote era
+  // lido: a 101ª empresa com regra de tempo ficava de fora calada.
+  const organizacoes: Array<{ id: string }> = [];
+  for (let i = 0; i < orgsComRegra.length; i += TAMANHO_DO_LOTE) {
+    const { data: lote } = await admin
+      .from("organizations")
+      .select("id")
+      .in("id", orgsComRegra.slice(i, i + TAMANHO_DO_LOTE));
+    organizacoes.push(...((lote ?? []) as Array<{ id: string }>));
+  }
 
   let emitidos = 0;
   let examinados = 0;
@@ -119,8 +158,8 @@ async function handle(req: NextRequest): Promise<Response> {
     pulados[motivo] = (pulados[motivo] ?? 0) + quantos;
   };
 
-  for (const organizacao of organizacoes ?? []) {
-    const org = organizacao.id as string;
+  for (const organizacao of organizacoes) {
+    const org = organizacao.id;
 
     for (const regra of todasAsRegras) {
       if (regra.organization_id !== org) continue;
@@ -302,19 +341,57 @@ async function handle(req: NextRequest): Promise<Response> {
 
       // Quem já disparou ESTA regra COM A MESMA ÂNCORA não dispara de novo.
       const jaEmitidos = new Set<string>();
+      let travaIlegivel: string | null = null;
       for (const lote of emLotes(candidatos, TAMANHO_DO_LOTE)) {
-        const { data: anteriores } = await admin
-          .from("event_log")
-          .select("entity_id, payload")
-          .eq("organization_id", org)
-          .eq("event_type", regra.trigger_event)
-          .eq("payload->>rule_id", regra.id)
-          .in("entity_id", lote.map((c) => c.leadId));
-        for (const anterior of anteriores ?? []) {
+        // FORK MIA (MIA-369) — FILTRADA e lida inteira. Antes era uma leitura
+        // só, sem `range`, de todo aviso desta regra para os 100 negócios: um
+        // aviso por negócio e ÂNCORA, que acumula a cada silêncio novo. Passou
+        // de 1000, o aviso que ficava fora da página parecia não dado, e o
+        // mesmo episódio disparava de novo.
+        //
+        // O filtro: só conta o aviso cuja âncora é a do candidato, e esse aviso
+        // nasceu depois dela. Então o que tem `created_at` antes da âncora mais
+        // antiga do lote (menos a folga) não pode travar ninguém e fica fora da
+        // leitura (o índice `event_log_org_type_idx` cobre o recorte). O que
+        // sobra, os episódios recentes, vem página a página.
+        const maisAntiga = Math.min(...lote.map((c) => Date.parse(c.ancora)));
+        const desde = new Date(maisAntiga - FOLGA_DO_RECORTE_MS).toISOString();
+        const lidos = await lerTodasAsPaginas<AvisoAnterior>(
+          (de, ate, pedirContagem) =>
+            admin
+              .from("event_log")
+              .select("entity_id, payload", pedirContagem ? { count: "exact" } : undefined)
+              .eq("organization_id", org)
+              .eq("event_type", regra.trigger_event)
+              .eq("payload->>rule_id", regra.id)
+              .in("entity_id", lote.map((c) => c.leadId))
+              .gte("created_at", desde)
+              .order("id", { ascending: true })
+              .range(de, ate),
+          { paginasMaximas: PAGINAS_DA_TRAVA },
+        );
+        // Trava ilegível ou cortada não é trava vazia: a regra fica de fora
+        // desta rodada (falha fechada) em vez de repetir o episódio.
+        if (lidos.erro || lidos.truncado) {
+          travaIlegivel = lidos.erro ?? `leitura cortada: mais de ${lidos.linhas.length} avisos num lote`;
+          break;
+        }
+        for (const anterior of lidos.linhas) {
           const payload = anterior.payload as { ancora?: unknown } | null;
           if (typeof payload?.ancora !== "string" || !payload.ancora) continue;
           jaEmitidos.add(chaveDeDisparoTemporal(regra.id, anterior.entity_id as string, payload.ancora));
         }
+      }
+
+      if (travaIlegivel) {
+        logger.error("[lead-time-triggers] leitura da trava falhou", {
+          organization_id: org,
+          rule_id: regra.id,
+          error: travaIlegivel,
+          requestId,
+        });
+        pular("trava_ilegivel", candidatos.length);
+        continue;
       }
 
       const novos = naoDisparadosTemporais(candidatos, jaEmitidos, regra.id);
@@ -367,7 +444,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
   return ok(
     {
-      organizacoes: (organizacoes ?? []).length,
+      organizacoes: organizacoes.length,
       regras: todasAsRegras.length,
       examinados,
       emitidos,

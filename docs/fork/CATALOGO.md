@@ -255,12 +255,23 @@ rodada, como a falha de leitura dela já tirava. O fuso das empresas no vencimen
 também derruba a rodada: antes vencia pelo fuso padrão. Teste contra o dublê que corta em 1000:
 `tests/unit/crons-de-proposta-leem-tudo.test.ts`.
 
+Os três crons de automação por tempo (MIA-369, 28/11/2026): `contact-birthdays`,
+`lead-date-field-due` e `lead-time-triggers` leem as regras ativas paginadas por `id` (cortada ou
+ilegível, a rodada sai 500 e nada dispara), e as empresas dessas regras em lotes de 100 (antes só o
+primeiro lote: a 101ª empresa com regra ficava de fora). A trava do `event_log`, que diz quem já foi
+avisado, é lida inteira nos dois de negócio; no `lead-time-triggers` ela também é FILTRADA por
+`created_at >= âncora mais antiga do lote - 1 dia` (o aviso de uma âncora nasce depois dela). No
+`lead-date-field-due` não há filtro a mais: a trava compara o valor da data normalizado e não tem
+janela de tempo, então só pagina. Trava ilegível ou cortada tira a regra da rodada
+(`pulados.trava_ilegivel`) em vez de avisar de novo, também nas duas leituras da trava do
+aniversário, que antes ignoravam o erro. Teste: `tests/unit/crons-de-automacao-por-tempo-leem-tudo.test.ts`.
+
 **O que a cerca não vê.** `rpc(...)`, o `workers/` da raiz, se o teto que existe é o certo (um
 `.limit(5000)` passa e devolve 1000) e se a ordem da paginação é estável. Esses ficam com a revisão.
 
 ```bash
 npx vitest run tests/unit/leitura-sem-teto-em-worker-e-cron.test.ts lib/leitura/todas-as-paginas.test.ts \
-  tests/unit/crons-de-proposta-leem-tudo.test.ts
+  tests/unit/crons-de-proposta-leem-tudo.test.ts tests/unit/crons-de-automacao-por-tempo-leem-tudo.test.ts
 ```
 
 ---

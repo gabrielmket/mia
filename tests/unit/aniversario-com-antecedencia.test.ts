@@ -90,7 +90,7 @@ function valorNoCaminho(linha: Linha, caminho: string): unknown {
   return atual;
 }
 
-/** O recorte do PostgREST que esta rota usa: `eq`, `in`, `not is`, `gte`, `limit`. */
+/** O recorte do PostgREST que esta rota usa: `eq`, `in`, `not is`, `gte`, `order`, `limit`, `range`. */
 class MundoFalso {
   readonly eventos: Linha[] = [];
 
@@ -127,6 +127,7 @@ class MundoFalso {
 class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }> {
   private filtros: Array<(l: Linha) => boolean> = [];
   private teto: number | null = null;
+  private inicio = 0;
 
   constructor(
     private readonly mundo: MundoFalso,
@@ -159,8 +160,20 @@ class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }
     return this;
   }
 
+  /** FORK MIA (MIA-369): a leitura paginada das regras ordena por `id`; a ordem de inserção basta aqui. */
+  order(): this {
+    return this;
+  }
+
   limit(n: number): this {
     this.teto = n;
+    return this;
+  }
+
+  /** FORK MIA (MIA-369): a página de `lerTodasAsPaginas`. Sem contagem, o fim é a página vazia. */
+  range(de: number, ate: number): this {
+    this.inicio = de;
+    this.teto = ate - de + 1;
     return this;
   }
 
@@ -170,7 +183,7 @@ class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }
     const casam = this.mundo
       .linhas(this.tabela)
       .filter((l) => this.filtros.every((f) => f(l)));
-    const data = this.teto === null ? casam : casam.slice(0, this.teto);
+    const data = this.teto === null ? casam.slice(this.inicio) : casam.slice(this.inicio, this.inicio + this.teto);
     return Promise.resolve({ data, error: null }).then(
       onfulfilled ?? ((v) => v as unknown as TResult),
     );
