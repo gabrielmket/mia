@@ -14,12 +14,28 @@ import { idiomaDoAviso } from "@/lib/i18n/idioma-do-aviso";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
 import { moduloLigado, modulosLigados } from "@/lib/instalacao/modulos";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { capacidadesLigadas } from "@/lib/organizacao/capacidades";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TaskSourceKind } from "@/lib/tarefas/vocabulario-de-origem";
 
 export const dynamic = "force-dynamic";
 const PROMISED_PROPOSAL: TaskSourceKind = "promised_proposal";
+
+/**
+ * FORK MIA (MIA-367) — os tetos das três leituras da rodada. Cada uma é lida
+ * INTEIRA, página a página (`lerTodasAsPaginas`), na ordem de `id`; acabou o
+ * teto sem prova de fim, a rodada falha FECHADA (500, nenhum aviso) em vez de
+ * tratar metade como tudo. Em 28/11/2026 a produção tinha 0 promessas
+ * pendentes, 0 propostas e 18 empresas: as folgas abaixo são largas.
+ */
+const PAGINAS_DAS_PROMESSAS = 50;
+/** Por empresa e lote de `LOTE_DE_IDS` negócios: as versões de proposta de 100 negócios. */
+const PAGINAS_DAS_PROPOSTAS = 20;
+/** Por lote de `LOTE_DE_IDS` empresas: uma linha por id, uma página basta. */
+const PAGINAS_DAS_EMPRESAS = 2;
+/** Ids por `in(...)`: 100 uuids cabem folgados na URL do PostgREST. */
+const LOTE_DE_IDS = 100;
 
 interface TarefaPromessa {
   id: string; organization_id: string; lead_id: string | null; source_kind: string | null;
@@ -52,20 +68,92 @@ export function encontrarPromessasSemProposta(
 export interface PromessaSemPropostaResult { sinalizadas: number }
 
 async function rodar(admin: ReturnType<typeof createAdminClient>, requestId: string): Promise<PromessaSemPropostaResult> {
-  const { data: tarefas, error: tarefasErr } = await admin
-    .from("crm_tasks")
-    .select("id, organization_id, lead_id, source_kind, due_date, status, created_at")
-    .eq("source_kind", PROMISED_PROPOSAL)
-    .eq("status", "pending");
-  if (tarefasErr) throw new Error(`query_tarefas_failed: ${tarefasErr.message}`);
+  const agora = new Date();
 
-  const { data: propostas, error: propostasErr } = await admin
-    .from("crm_proposals")
-    .select("id, organization_id, lead_id, created_at");
-  if (propostasErr) throw new Error(`query_propostas_failed: ${propostasErr.message}`);
+  // FORK MIA (MIA-367) — só as promessas que PODEM virar aviso: pendentes, com
+  // negócio e já vencidas (os mesmos cortes de `encontrarPromessasSemProposta`,
+  // que continua conferindo). Antes eram todas as pendentes da instalação, numa
+  // leitura só, cortada em 1000 linhas pelo PostgREST sem aviso: a promessa que
+  // ficava fora da página nunca era sinalizada.
+  const lidasTarefas = await lerTodasAsPaginas<TarefaPromessa>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("crm_tasks")
+        .select(
+          "id, organization_id, lead_id, source_kind, due_date, status, created_at",
+          pedirContagem ? { count: "exact" } : undefined,
+        )
+        .eq("source_kind", PROMISED_PROPOSAL)
+        .eq("status", "pending")
+        .not("lead_id", "is", null)
+        .lt("due_date", agora.toISOString())
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DAS_PROMESSAS },
+  );
+  if (lidasTarefas.erro) throw new Error(`query_tarefas_failed: ${lidasTarefas.erro}`);
+  if (lidasTarefas.truncado) {
+    throw new Error(`query_tarefas_truncada: mais de ${lidasTarefas.linhas.length} promessas vencidas`);
+  }
+  const tarefas = lidasTarefas.linhas;
+  if (tarefas.length === 0) return { sinalizadas: 0 };
 
-  const { data: orgs, error: orgsErr } = await admin.from("organizations").select("id, settings");
-  if (orgsErr) throw new Error(`query_orgs_failed: ${orgsErr.message}`);
+  // FORK MIA (MIA-367) — só as propostas dos negócios dessas promessas, por
+  // empresa (o índice `crm_proposals_org_lead_idx`). Antes eram TODAS as
+  // propostas da instalação, sem filtro, cortadas em 1000: a proposta que já
+  // existia, mas ficava fora da página, fazia o cron avisar "não foi criada".
+  const negociosPorEmpresa = new Map<string, Set<string>>();
+  for (const t of tarefas) {
+    const negocios = negociosPorEmpresa.get(t.organization_id) ?? new Set<string>();
+    negocios.add(t.lead_id as string);
+    negociosPorEmpresa.set(t.organization_id, negocios);
+  }
+  const propostas: PropostaMinima[] = [];
+  for (const [orgId, negocios] of negociosPorEmpresa) {
+    const ids = [...negocios];
+    for (let i = 0; i < ids.length; i += LOTE_DE_IDS) {
+      const lote = ids.slice(i, i + LOTE_DE_IDS);
+      const lidas = await lerTodasAsPaginas<PropostaMinima>(
+        (de, ate, pedirContagem) =>
+          admin
+            .from("crm_proposals")
+            .select("id, organization_id, lead_id, created_at", pedirContagem ? { count: "exact" } : undefined)
+            .eq("organization_id", orgId)
+            .in("lead_id", lote)
+            .order("id", { ascending: true })
+            .range(de, ate),
+        { paginasMaximas: PAGINAS_DAS_PROPOSTAS },
+      );
+      if (lidas.erro) throw new Error(`query_propostas_failed: ${lidas.erro}`);
+      // Cortada, a proposta que falta pareceria "não criada": falha fechada.
+      if (lidas.truncado) {
+        throw new Error(`query_propostas_truncada: mais de ${lidas.linhas.length} propostas num lote`);
+      }
+      propostas.push(...lidas.linhas);
+    }
+  }
+
+  // FORK MIA (MIA-367) — só as empresas das promessas, e lidas inteiras. Antes
+  // eram todas as empresas da instalação numa leitura só: a que ficava depois
+  // da linha 1000 nunca era "ligada" e não recebia aviso.
+  const orgIds = [...negociosPorEmpresa.keys()];
+  const orgs: Array<{ id: string; settings: unknown }> = [];
+  for (let i = 0; i < orgIds.length; i += LOTE_DE_IDS) {
+    const lote = orgIds.slice(i, i + LOTE_DE_IDS);
+    const lidas = await lerTodasAsPaginas<{ id: string; settings: unknown }>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("organizations")
+          .select("id, settings", pedirContagem ? { count: "exact" } : undefined)
+          .in("id", lote)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_DAS_EMPRESAS },
+    );
+    if (lidas.erro) throw new Error(`query_orgs_failed: ${lidas.erro}`);
+    if (lidas.truncado) throw new Error(`query_orgs_truncada: mais de ${lidas.linhas.length} empresas num lote`);
+    orgs.push(...lidas.linhas);
+  }
 
   // A camada POR EMPRESA (#4871): o cron é GLOBAL, e a lista de módulos era lida
   // UMA vez, sem organização — a empresa que desligou `propostas` em Módulos por
@@ -76,14 +164,14 @@ async function rodar(admin: ReturnType<typeof createAdminClient>, requestId: str
   // `settings`. Leitura que falha devolve lista vazia (falha fechada): a empresa
   // fica de fora desta rodada em vez de ser avisada sem permissão.
   const orgsLigadas = new Set<string>();
-  for (const o of orgs ?? []) {
+  for (const o of orgs) {
     const modulos = await modulosLigados(admin, o.id);
     if (capacidadesLigadas(o.settings, modulos).includes("propostas")) orgsLigadas.add(o.id);
   }
 
   const achadas = encontrarPromessasSemProposta(
-    { tarefas: tarefas ?? [], propostas: propostas ?? [], orgsLigadas },
-    new Date(),
+    { tarefas, propostas, orgsLigadas },
+    agora,
   );
   const idiomas = new Map<string, Idioma>();
   for (const t of achadas) {

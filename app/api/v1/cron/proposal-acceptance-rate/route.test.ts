@@ -104,6 +104,7 @@ function adminFalso(cena: Cena) {
   const inseridas: Array<Record<string, unknown>> = [];
   function consulta(tabela: string) {
     const filtros: Record<string, unknown> = {};
+    let faixa: [number, number] | null = null;
     const resolver = () => {
       switch (tabela) {
         case "organizations":
@@ -132,6 +133,13 @@ function adminFalso(cena: Cena) {
       in: () => api,
       gte: () => api,
       not: () => api,
+      // FORK MIA (MIA-367): a rodada lê página a página (`order` + `range`), e a
+      // página que passa do fim volta vazia, como no PostgREST.
+      order: () => api,
+      range: (de: number, ate: number) => {
+        faixa = [de, ate];
+        return api;
+      },
       insert: async (linha: Record<string, unknown>) => {
         inseridas.push(linha);
         return { error: null };
@@ -141,7 +149,9 @@ function adminFalso(cena: Cena) {
           ? { data: { id: "aviso-existente" }, error: null }
           : { data: null, error: null },
       then: (ok: (v: unknown) => unknown, falhou: (e: unknown) => unknown) =>
-        Promise.resolve(resolver()).then(ok, falhou),
+        Promise.resolve(resolver())
+          .then((r) => (faixa && Array.isArray(r.data) ? { ...r, data: r.data.slice(faixa[0], faixa[1] + 1) } : r))
+          .then(ok, falhou),
     };
     return api;
   }

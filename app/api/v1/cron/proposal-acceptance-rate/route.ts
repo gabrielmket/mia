@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { idiomaDoAviso, preencher } from "@/lib/i18n/idioma-do-aviso";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { logger } from "@/lib/logger";
 import { empresasComModuloDesligado, modulosLigados, type ModuloOpcional } from "@/lib/instalacao/modulos";
 import { capacidadesLigadas } from "@/lib/organizacao/capacidades";
@@ -14,6 +15,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 const PISO_DE_ACEITE = 0.3;
 const MINIMO_DE_DECISOES = 5; // abaixo disso, 30% de 1 proposta não significa nada
+/**
+ * FORK MIA (MIA-367) — as duas leituras da rodada são lidas INTEIRAS, página a
+ * página (`lerTodasAsPaginas`), na ordem de `id`. Em 28/11/2026 a produção
+ * tinha 18 empresas e 0 propostas enviadas nos últimos 30 dias: folga larga.
+ */
+const PAGINAS_DAS_EMPRESAS = 20;
+/** As propostas enviadas em 30 dias por UMA empresa: até 20 mil. */
+const PAGINAS_DAS_PROPOSTAS = 20;
 
 export function calcularTaxaDeAceite(propostas: readonly { status: string }[]): number | null {
   const decididas = propostas.filter((p) => p.status === "aceita" || p.status === "recusada");
@@ -51,8 +60,24 @@ export function organizacoesComPropostas(
 
 async function rodar(admin: ReturnType<typeof createAdminClient>, requestId: string): Promise<TaxaDeAceiteResult> {
   const trintaDiasAtras = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgs, error: orgsErr } = await admin.from("organizations").select("id, settings");
-  if (orgsErr) throw new Error(`query_orgs_failed: ${orgsErr.message}`);
+  // FORK MIA (MIA-367) — todas as empresas, lidas inteiras. Antes era uma
+  // leitura só, cortada em 1000 linhas pelo PostgREST sem aviso: a empresa que
+  // ficava fora da página nunca tinha a taxa conferida. Cortada, a rodada falha
+  // fechada (500) em vez de tratar metade como tudo.
+  const lidasEmpresas = await lerTodasAsPaginas<{ id: string; settings: unknown }>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("organizations")
+        .select("id, settings", pedirContagem ? { count: "exact" } : undefined)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DAS_EMPRESAS },
+  );
+  if (lidasEmpresas.erro) throw new Error(`query_orgs_failed: ${lidasEmpresas.erro}`);
+  if (lidasEmpresas.truncado) {
+    throw new Error(`query_orgs_truncada: mais de ${lidasEmpresas.linhas.length} empresas`);
+  }
+  const orgs = lidasEmpresas.linhas;
 
   // A camada POR EMPRESA (#4871), uma leitura para a rodada inteira: o cron não
   // tem "a empresa do request", então a decisão de cada uma é resolvida aqui, uma
@@ -70,20 +95,37 @@ async function rodar(admin: ReturnType<typeof createAdminClient>, requestId: str
   if (desligadas === null) throw new Error("query_modulos_failed: organization_modules ilegível");
 
   let avisadas = 0;
-  for (const orgId of organizacoesComPropostas(orgs ?? [], modulos, desligadas)) {
+  for (const orgId of organizacoesComPropostas(orgs, modulos, desligadas)) {
     const org = { id: orgId };
-    const { data: propostas, error: propErr } = await admin
-      .from("crm_proposals")
-      .select("status")
-      .eq("organization_id", org.id)
-      .gte("sent_at", trintaDiasAtras)
-      .not("sent_at", "is", null);
-    if (propErr) {
-      logger.error("[proposal-acceptance-rate] query falhou", { error: propErr.message, organization_id: org.id, requestId });
+    // FORK MIA (MIA-367) — as propostas de 30 dias da empresa, TODAS. Cortada
+    // em 1000 linhas, a taxa saía de um recorte (as mais antigas, pela ordem
+    // física) e o aviso de queda vinha ou faltava errado.
+    const lidas = await lerTodasAsPaginas<{ status: string }>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("crm_proposals")
+          .select("status", pedirContagem ? { count: "exact" } : undefined)
+          .eq("organization_id", org.id)
+          .gte("sent_at", trintaDiasAtras)
+          .not("sent_at", "is", null)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_DAS_PROPOSTAS },
+    );
+    if (lidas.erro) {
+      logger.error("[proposal-acceptance-rate] query falhou", { error: lidas.erro, organization_id: org.id, requestId });
+      continue;
+    }
+    // Recorte não é taxa: a empresa fica de fora desta rodada, como na falha
+    // de leitura logo acima (um aviso a menos se corrige na próxima rodada).
+    if (lidas.truncado) {
+      logger.error("[proposal-acceptance-rate] leitura cortada", {
+        lidas: lidas.linhas.length, organization_id: org.id, requestId,
+      });
       continue;
     }
 
-    const taxa = calcularTaxaDeAceite(propostas ?? []);
+    const taxa = calcularTaxaDeAceite(lidas.linhas);
     if (taxa === null || taxa >= PISO_DE_ACEITE) continue;
 
     const { data: existente } = await admin

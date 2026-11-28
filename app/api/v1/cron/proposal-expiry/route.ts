@@ -15,12 +15,26 @@ import { moduloLigado } from "@/lib/instalacao/modulos";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { idiomaDoAviso } from "@/lib/i18n/idioma-do-aviso";
 import type { Idioma } from "@/lib/i18n/idiomas";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dataIsoNoFuso } from "@/lib/propostas/data-no-fuso";
 import { FUSO_PADRAO, fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * FORK MIA (MIA-367) — as duas leituras da rodada são lidas INTEIRAS, página a
+ * página (`lerTodasAsPaginas`), na ordem de `id`. Acabou o teto sem prova de
+ * fim, a rodada falha FECHADA (500, nada vence) em vez de tratar metade como
+ * tudo. Em 28/11/2026 a produção tinha 0 propostas enviadas com validade e 18
+ * empresas: as folgas são largas.
+ */
+const PAGINAS_DAS_CANDIDATAS = 50;
+/** Por lote de `LOTE_DE_EMPRESAS` empresas: uma linha por id, uma página basta. */
+const PAGINAS_DAS_EMPRESAS = 2;
+/** Ids por `in(...)`: 100 uuids cabem folgados na URL do PostgREST. */
+const LOTE_DE_EMPRESAS = 100;
 
 interface PropostaParaVerificar {
   id: string; organization_id: string; lead_id: string; contact_id: string;
@@ -46,22 +60,46 @@ async function rodarVencimento(
   admin: ReturnType<typeof createAdminClient>,
   requestId: string,
 ): Promise<VencimentoResult> {
-  const { data: candidatas, error: selErr } = await admin
-    .from("crm_proposals")
-    .select("id, organization_id, lead_id, contact_id, status, valid_until")
-    .eq("status", "enviada")
-    .not("valid_until", "is", null);
-  if (selErr) throw new Error(`query_failed: ${selErr.message}`);
+  // FORK MIA (MIA-367) — as enviadas com validade da instalação inteira, lidas
+  // TODAS. Antes era uma leitura só, cortada em 1000 linhas pelo PostgREST sem
+  // aviso: a proposta vencida que ficava fora da página não vencia nunca.
+  const lidas = await lerTodasAsPaginas<PropostaParaVerificar>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("crm_proposals")
+        .select("id, organization_id, lead_id, contact_id, status, valid_until", pedirContagem ? { count: "exact" } : undefined)
+        .eq("status", "enviada")
+        .not("valid_until", "is", null)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DAS_CANDIDATAS },
+  );
+  if (lidas.erro) throw new Error(`query_failed: ${lidas.erro}`);
+  if (lidas.truncado) throw new Error(`query_truncada: mais de ${lidas.linhas.length} propostas enviadas`);
+  const candidatas = lidas.linhas;
 
-  const orgIds = [...new Set((candidatas ?? []).map((p) => p.organization_id))];
+  // FORK MIA (MIA-367) — o fuso de cada empresa, em lotes de 100 ids e lido
+  // inteiro. Leitura que falha ou sai cortada derruba a rodada: vencer com o
+  // fuso padrão no lugar do da empresa adiantaria o vencimento em horas.
+  const orgIds = [...new Set(candidatas.map((p) => p.organization_id))];
   const fusoPorOrganizacao = new Map<string, string>();
-  if (orgIds.length > 0) {
-    const { data: orgs } = await admin.from("organizations").select("id, timezone").in("id", orgIds);
-    for (const o of (orgs ?? []) as Array<{ id: string; timezone: string | null }>) {
-      fusoPorOrganizacao.set(o.id, fusoUtilizavel(o.timezone));
-    }
+  for (let i = 0; i < orgIds.length; i += LOTE_DE_EMPRESAS) {
+    const lote = orgIds.slice(i, i + LOTE_DE_EMPRESAS);
+    const orgs = await lerTodasAsPaginas<{ id: string; timezone: string | null }>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("organizations")
+          .select("id, timezone", pedirContagem ? { count: "exact" } : undefined)
+          .in("id", lote)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_DAS_EMPRESAS },
+    );
+    if (orgs.erro) throw new Error(`query_orgs_failed: ${orgs.erro}`);
+    if (orgs.truncado) throw new Error(`query_orgs_truncada: mais de ${orgs.linhas.length} empresas num lote`);
+    for (const o of orgs.linhas) fusoPorOrganizacao.set(o.id, fusoUtilizavel(o.timezone));
   }
-  const vencidas = encontrarPropostasVencidas(candidatas ?? [], new Date(), fusoPorOrganizacao);
+  const vencidas = encontrarPropostasVencidas(candidatas, new Date(), fusoPorOrganizacao);
   if (vencidas.length === 0) return { vencidas: 0 };
 
   // A camada POR EMPRESA (#4871): o cron é GLOBAL, então a pergunta é feita por
