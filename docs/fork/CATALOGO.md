@@ -217,6 +217,41 @@ Duas leituras que o upstream muda sem aviso e desligam função nossa: a lista d
 de e-mail ou o link do raio-X) e os textos-contrato (etiqueta `Formulario_Meta`, chave `MetaEtapa:<uuid>`,
 a marca `demonstracao`), lidos por código nosso. Confira com `git grep -n "Formulario_Meta" -- lib`.
 
+### R10. Worker e cron não leem sem teto
+
+O PostgREST devolve no máximo 1000 linhas por pedido (`supabase/config.toml`, `max_rows`) e não
+avisa. Em worker e cron ninguém olha o resultado, então a leitura cortada vira defeito calado: o
+observador de risco gravou o mesmo "Negócio esfriou" milhares de vezes por dia numa empresa
+(MIA-267), e a lista de empresas do mesmo cron só via quem caía nas primeiras 1000 linhas (MIA-320).
+
+**A regra.** Em `lib/**/*worker*`, `lib/**/*sweep*` e `app/api/v1/cron/**`, toda leitura
+`.from(...).select(...)` tem `.range()`, `.limit()`, `.single()`, `.maybeSingle()` ou `head: true`.
+Para ler tudo, use `lerTodasAsPaginas` (`lib/leitura/todas-as-paginas.ts`): a consulta ordenada por
+uma chave única (`.order("id")`), `{ count: "exact" }` na primeira página e `range(de, ate)` no fim.
+Leitura por lista de ids com várias linhas por id: `buscaEmLotesSemTeto`
+(`lib/leitura/em-lotes-sem-teto.ts`). O `truncado` de volta não se ignora: em worker que decide o
+que gravar ou a quem mandar, leitura cortada falha fechada (lança, e o laço daquela empresa ou daquele
+fluxo pula a passada).
+
+**A cerca.** `tests/unit/leitura-sem-teto-em-worker-e-cron.test.ts` lê o código pela árvore do
+TypeScript e reprova leitura sem teto fora da lista `CONHECIDAS`. Cada entrada da lista tem arquivo,
+tabela, quantas leituras e a classe: **teto natural** (o conjunto é pequeno por construção e o motivo
+diz qual é o teto), **a trocar** (cresce com a empresa ou com a instalação e hoje ainda cabe) ou
+**resolvido** (já trocado num PR que ainda não entrou). A lista só encolhe: trocou uma leitura,
+baixe o número ou apague a entrada no mesmo PR.
+
+**Quando trocar um "a trocar".** Ao mexer no arquivo, ou antes, quando a contagem só leitura na
+produção (skill `mia-implantacao`, seção 2) mostrar a tabela perto de 1000 linhas no recorte que a
+leitura pega. Em 27/11/2026 (MIA-340) só as duas leituras de inscrições encerradas do
+`lib/followup/silence-sweep.ts` (pausa de reentrada e cooldown) passavam de 1000, e foram trocadas.
+
+**O que a cerca não vê.** `rpc(...)`, o `workers/` da raiz, se o teto que existe é o certo (um
+`.limit(5000)` passa e devolve 1000) e se a ordem da paginação é estável. Esses ficam com a revisão.
+
+```bash
+npx vitest run tests/unit/leitura-sem-teto-em-worker-e-cron.test.ts lib/leitura/todas-as-paginas.test.ts
+```
+
 ---
 
 ## Uma seção por função

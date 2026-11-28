@@ -153,4 +153,37 @@ describe("ler todas as páginas", () => {
 
     expect(banco.pedidos.map((p) => p.pediuContagem)).toEqual([true, false, false]);
   });
+
+  // FORK MIA (MIA-340) — o auxiliar dos workers e crons. A soma fechar não
+  // prova que cada linha veio UMA vez: duas repetidas e duas puladas somam o
+  // mesmo. Aqui se confere linha a linha, com a ordem física embaralhada.
+  it("Academia Alfa: 2.500 alunos lidos inteiros, cada um uma vez, nenhum pulado", async () => {
+    const ACADEMIA_ALFA = "aaaaaaaa-0000-4000-8000-000000000001";
+    const ids = Array.from({ length: 2_500 }, (_, i) => `aluno-${String(i).padStart(5, "0")}`);
+    // Ordem física que NÃO é a do `id`: a página seguinte só é a continuação
+    // da anterior porque a consulta ordena pela chave única.
+    const fisica = ids.map((id, i) => ({ id, ordem: (i * 7_919) % 2_500 })).sort((x, y) => x.ordem - y.ordem);
+    const banco = postgrestComTeto({
+      contacts: fisica.map(({ id }) => ({ id, organization_id: ACADEMIA_ALFA })),
+    });
+
+    const lido = await lerTodasAsPaginas<{ id: string }>(
+      (de, ate, pedirContagem) =>
+        banco.cliente
+          .from("contacts")
+          .select("id", pedirContagem ? { count: "exact" } : undefined)
+          .eq("organization_id", ACADEMIA_ALFA)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: 10 },
+    );
+
+    expect(lido.erro).toBeNull();
+    expect(lido.truncado).toBe(false);
+    const lidos = lido.linhas.map((l) => l.id);
+    expect(lidos).toHaveLength(2_500);
+    expect(new Set(lidos).size).toBe(2_500); // nenhum repetido
+    expect([...lidos].sort()).toEqual(ids); // nenhum pulado
+    expect(banco.pedidosEm("contacts")).toBe(3);
+  });
 });

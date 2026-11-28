@@ -172,6 +172,7 @@ import {
   ttlDaAutorizacaoMs,
 } from "@/lib/ai/elegibilidade/gate";
 import { logger } from "@/lib/logger";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
@@ -681,6 +682,14 @@ const STATUS_ENCERRADOS = ["completed", "cancelled", "dead"] as const;
    consulta". */
 /** Teto de linhas por resposta do PostgREST (`max-rows`); páginas maiores voltam cortadas em silêncio. */
 const PAGINA_DE_INSCRICOES = 1000;
+/**
+ * FORK MIA (MIA-340) — quantas páginas de 1000 UM lote de 100 contatos pode ter
+ * nas leituras de inscrição que ACABARAM (pausa de reentrada, cooldown). Em
+ * 27/11/2026 a produção já tinha contato com milhares de tentativas encerradas
+ * num mesmo fluxo. 20 páginas (20 mil linhas por lote) é folga larga; passou
+ * disso, a leitura falha FECHADA (ver abaixo).
+ */
+const PAGINAS_DAS_INSCRICOES_ENCERRADAS = 20;
 
 /** Production adapter: `SilenceSweepDb` sobre o client service-role real. */
 export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSweepDb {
@@ -938,15 +947,31 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
     async loadEncerramentosDoFluxo(orgId, pointerId, contactIds) {
       const encerradaEm = new Map<string, number>();
       for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
-        const { data, error } = await admin
-          .from("followup_enrollments")
-          .select("contact_id, completed_at, updated_at")
-          .eq("organization_id", orgId)
-          .eq("pointer_id", pointerId)
-          .in("status", [...STATUS_ENCERRADOS])
-          .in("contact_id", contactIds.slice(i, i + LOTE_DE_CONTATOS));
-        if (error) throw new Error(error.message);
-        for (const row of (data ?? []) as Array<{ contact_id: string; completed_at: string | null; updated_at: string | null }>) {
+        const lote = contactIds.slice(i, i + LOTE_DE_CONTATOS);
+        // FORK MIA (MIA-340) — o lote INTEIRO, página a página, na ordem de `id`.
+        // Sem `range` o PostgREST cortava em 1000 linhas: 100 contatos com 10+
+        // tentativas encerradas cada passavam disso, e o contato que ficava fora
+        // da página perdia a pausa de reentrada (voltava a ser inscrito antes da
+        // hora). Leitura cortada não segue: o ponteiro falha nesta passada
+        // (o `catch` do laço) em vez de inscrever quem devia esperar.
+        const lido = await lerTodasAsPaginas<{ contact_id: string; completed_at: string | null; updated_at: string | null }>(
+          (de, ate, pedirContagem) =>
+            admin
+              .from("followup_enrollments")
+              .select("contact_id, completed_at, updated_at", pedirContagem ? { count: "exact" } : undefined)
+              .eq("organization_id", orgId)
+              .eq("pointer_id", pointerId)
+              .in("status", [...STATUS_ENCERRADOS])
+              .in("contact_id", lote)
+              .order("id", { ascending: true })
+              .range(de, ate),
+          { paginasMaximas: PAGINAS_DAS_INSCRICOES_ENCERRADAS },
+        );
+        if (lido.erro) throw new Error(lido.erro);
+        if (lido.truncado) {
+          throw new Error(`inscrições encerradas passam de ${lido.linhas.length} num lote, leitura cortada`);
+        }
+        for (const row of lido.linhas) {
           // Nem todo caminho de encerramento grava `completed_at`; o mais tardio dos dois é o fim.
           const fim = Math.max(Date.parse(row.completed_at ?? "") || 0, Date.parse(row.updated_at ?? "") || 0);
           if (fim > (encerradaEm.get(row.contact_id) ?? 0)) encerradaEm.set(row.contact_id, fim);
@@ -1080,16 +1105,35 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
 
     async loadContactIdsEmCooldown(orgId, pointerId, contactIds, cutoffIso) {
       if (contactIds.length === 0) return new Set();
-      const { data, error } = await admin
-        .from("followup_enrollments")
-        .select("contact_id")
-        .eq("organization_id", orgId)
-        .eq("pointer_id", pointerId)
-        .in("contact_id", contactIds)
-        .not("status", "in", `(${STATUS_VIVOS.join(",")})`)
-        .gte("updated_at", cutoffIso);
-      if (error) throw new Error(error.message);
-      return new Set((data ?? []).map((row: { contact_id: string }) => row.contact_id));
+      // FORK MIA (MIA-340) — em lotes de 100 contatos e cada lote lido INTEIRO,
+      // página a página. Antes era uma consulta só, sem `range`: passou de 1000
+      // tentativas recentes, o contato que ficava fora da página saía do
+      // cooldown e era inscrito de novo. Leitura cortada falha fechada, como em
+      // `loadEncerramentosDoFluxo`.
+      const emCooldown = new Set<string>();
+      for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
+        const lote = contactIds.slice(i, i + LOTE_DE_CONTATOS);
+        const lido = await lerTodasAsPaginas<{ contact_id: string }>(
+          (de, ate, pedirContagem) =>
+            admin
+              .from("followup_enrollments")
+              .select("contact_id", pedirContagem ? { count: "exact" } : undefined)
+              .eq("organization_id", orgId)
+              .eq("pointer_id", pointerId)
+              .in("contact_id", lote)
+              .not("status", "in", `(${STATUS_VIVOS.join(",")})`)
+              .gte("updated_at", cutoffIso)
+              .order("id", { ascending: true })
+              .range(de, ate),
+          { paginasMaximas: PAGINAS_DAS_INSCRICOES_ENCERRADAS },
+        );
+        if (lido.erro) throw new Error(lido.erro);
+        if (lido.truncado) {
+          throw new Error(`inscrições em cooldown passam de ${lido.linhas.length} num lote, leitura cortada`);
+        }
+        for (const row of lido.linhas) emCooldown.add(row.contact_id);
+      }
+      return emCooldown;
     },
 
     async insertEnrollment(input) {
