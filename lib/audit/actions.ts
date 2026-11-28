@@ -29,6 +29,386 @@
  * `tests/unit/audit-lista-do-painel-e-derivada.test.tsx` reprova quem tentar.
  */
 export const AUDIT_ACTIONS = [
+  // FORK MIA (MIA-372) · TODOS os códigos de auditoria da MIA, num bloco só, aqui
+  // no topo. Não moram em arquivo nosso porque este arquivo não pode importar nada
+  // (o cabeçalho acima e tests/unit/audit-lista-do-painel-e-derivada.test.tsx).
+  // Código novo da MIA entra no FIM deste bloco, nunca no meio das linhas do
+  // upstream: cada linha nossa espalhada lá era um conflito a cada fusão. O
+  // catálogo: docs/fork/CATALOGO.md, seção "Regras que valem para todas".
+
+  // (9023) — um LINK CURTO novo foi gerado para um convite pendente
+  // ("Copiar link do convite" na tela de Equipe, ou o MCP de plataforma). O
+  // anterior deixou de valer. A linha diz quem gerou e para qual convite; o
+  // código nunca entra (`lib/team/link-curto.ts`).
+  "member.invite_link_created",
+
+  // Saldo do provedor de IA: são lançamentos de DINHEIRO, e quem confere a conta
+  // depois precisa saber o que foi lançado (ou apagado), por quem e quando.
+  "platform_admin.ai_saldo_lancado",
+  "platform_admin.ai_saldo_lancamento_apagado",
+  "platform_admin.ai_cotacao_definida",
+  // Carteira do CLIENTE: crédito lançado e preço acordado são dinheiro dele, e
+  // o extrato não se apaga — a correção é outro lançamento, que também entra.
+  "platform_admin.carteira_lancada",
+  "platform_admin.carteira_preco_definido",
+  // Liberação por módulo: é contrato. Quem liberou, para quem, quando — e o
+  // cancelamento, que é a metade que costuma sumir.
+  "platform_admin.modulo_liberado",
+  "platform_admin.modulo_cancelado",
+  // Submeter template fala em nome da marca na Meta, e reprovação suja a conta
+  // inteira: quem submeteu, o quê e quando precisa ficar registrado.
+  "channels.template_criado",
+  "channels.template_editado",
+  "channels.template_excluido",
+  // MIA Broadcast: cada disparo gasta dinheiro do cliente. Quem mandou, para
+  // quantos e a que preço é a primeira pergunta quando a fatura é contestada.
+  "platform.numero_de_avisos_alterado",
+  "platform.modelo_de_ia_alterado",
+  "platform.cadastro_incorporado_alterado",
+  "platform.cadastro_incorporado_amarrado",
+  // (9164) — a coexistência do WhatsApp (docs/fork/coexistencia.md):
+  // quem ligou ou desligou a chave da empresa, o número que a empresa conectou
+  // pelo app WhatsApp Business e o canal por QR do mesmo número que saiu do ar.
+  "platform.coexistencia_alterada",
+  "channel.coexistencia_conectada",
+  "channel.coexistencia_qr_desligado",
+  "platform.report_alterado",
+  "platform.fila_morta_reprocessada",
+  "platform.precos_da_meta_alterados",
+  "empresas.mescladas",
+  "platform.grupo_de_avisos_alterado",
+  "broadcast.criado",
+  "broadcast.editado",
+  "broadcast.excluido",
+  // cartão aberto (docs/fork/cartoes-e-fichas.md): a nota interna, as
+  // pessoas envolvidas num negócio e a confirmação do campo que a IA preencheu.
+  "lead.nota_adicionada",
+  "lead.contato_envolvido_incluido",
+  "lead.contato_envolvido_retirado",
+  "lead.campo_confirmado",
+  "broadcast.disparado",
+  // (.89) — o disparo de e-mail marketing (docs/fork/email-marketing.md):
+  // a configuração, o domínio, as campanhas (cada passo que gasta dinheiro ou
+  // fala com a base inteira), a supressão, os consentimentos importados, o
+  // descadastro e a reinscrição pela própria pessoa, os avisos da Amazon e a
+  // rodada do cron que mandou, pausou ou concluiu (a vazia não audita).
+  "email_marketing.configurado",
+  "email_marketing.dominio_conferido",
+  "email_marketing.remetente_salvo",
+  "email_marketing.texto_de_consentimento_salvo",
+  "email_marketing.segmento_salvo",
+  "email_marketing.campanha_criada",
+  "email_marketing.campanha_editada",
+  "email_marketing.teste_enviado",
+  "email_marketing.campanha_confirmada",
+  "email_marketing.campanha_pausada",
+  "email_marketing.campanha_retomada",
+  "email_marketing.campanha_cancelada",
+  "email_marketing.acao_sobre_cliques",
+  "email_marketing.supressao_acrescentada",
+  "email_marketing.supressao_importada",
+  "email_marketing.consentimentos_importados",
+  "email_marketing.descadastro",
+  "email_marketing.reinscricao",
+  "email_marketing.aviso_da_amazon",
+  "email_marketing.rodada",
+  "email_marketing.imagem_enviada",
+  // (.90) — a jornada de assinatura (docs/fork/jornada-de-assinatura.md):
+  // o plano que liga e desliga módulo (e a véspera da descida), os planos e os
+  // pacotes de crédito garantidos pela plataforma, e a compra de créditos por Pix.
+  "planos_mia.modulos_seguiram_o_plano",
+  "planos_mia.aviso_de_modulo_saindo",
+  "planos_mia.planos_garantidos",
+  "planos_mia.pacotes_garantidos",
+  "carteira.compra_iniciada",
+  "carteira.compra_confirmada",
+  // (.96) · o pagamento no início (docs/fork/pagamento-no-inicio.md): a
+  // cobrança gerada (forma), a refeita (troca do boleto ou de plano), a tentativa
+  // no cartão (só o resultado, NUNCA o cartão), a confirmação, a troca de plano
+  // antes de pagar, a forma escolhida no teste, o bloqueio no fim do teste sem
+  // pagamento, o lembrete do dia seguinte, os dados fiscais gravados e a
+  // configuração da nota fiscal pelo Asaas.
+  "pagamento_inicial.cobranca_gerada",
+  "pagamento_inicial.cobranca_refeita",
+  "pagamento_inicial.cartao_tentado",
+  "pagamento_inicial.confirmado",
+  "pagamento_inicial.plano_trocado",
+  "pagamento_inicial.forma_escolhida",
+  "pagamento_inicial.fim_do_teste_bloqueou",
+  "pagamento_inicial.lembrete_enviado",
+  "dados_fiscais.gravados",
+  "cobranca.nota_fiscal_configurada",
+  // (.98) · cupons, parceiros e comissão (docs/fork/cupons-e-parceiros.md):
+  // o cupom criado, mudado, pausado, aplicado, tirado e trocado pela Time; o parceiro
+  // criado, mudado, exportado e anonimizado (LGPD), a troca do parceiro de um cliente;
+  // o setup de implantação (pedido, cancelado, pago, estornado, o preço do plano); o
+  // mês fechado, o anexo, o pago e os extratos do repasse. Nunca documento nem Pix.
+  "cupom.criado",
+  "cupom.alterado",
+  "cupom.pausado",
+  "cupom.ativado",
+  "cupom.aplicado",
+  "cupom.tirado",
+  "cupom.trocado_pela_time",
+  "parceiro.criado",
+  "parceiro.alterado",
+  "parceiro.exportado",
+  "parceiro.anonimizado",
+  "parceiro.trocado_no_cliente",
+  "parceiros.rodada",
+  "parceiros.configuracao_gravada",
+  "setup.pedido",
+  "setup.cancelado",
+  "setup.pago",
+  "setup.estornado",
+  "setup.preco_do_plano",
+  "repasse.mes_fechado",
+  "repasse.anexo_gravado",
+  "repasse.marcado_pago",
+  "repasse.extratos_enviados",
+  // (.60) — leads dos formulários da Meta: quem ligou a importação, que
+  // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
+  // relógio que trouxe lead ou deu erro (a vazia não audita).
+  "leads_da_meta.configurado",
+  "leads_da_meta.formulario_salvo",
+  "leads_da_meta.lido_agora",
+  "leads_da_meta.rodada",
+  // (.61) — de qual empresa é cada Página da Meta (migration 9004): quem
+  // atribuiu ou retirou o dono, e qual empresa empresta a conexão da plataforma.
+  "platform.pagina_da_meta_atribuida",
+  "platform.pagina_da_meta_retirada",
+  "platform.conexao_da_meta_escolhida",
+  // (.64, migration 9008) — a empresa com conta própria da Meta assume
+  // e solta as Páginas dela: quem marcou ou desmarcou, e quantos formulários
+  // desligaram ao soltar.
+  "leads_da_meta.pagina_assumida",
+  "leads_da_meta.pagina_solta",
+  // (9011-9013) — a agenda do Outlook / Microsoft 365
+  // (docs/fork/agenda-microsoft.md): conectar, desconectar, a escolha das
+  // agendas, as rotinas e as decisões de conflito.
+  "agenda.microsoft.conexao_iniciada",
+  "agenda.microsoft.conexao_falhou",
+  "agenda.microsoft.conexao_concluida",
+  "agenda.microsoft.conexao_desconectada",
+  "agenda.microsoft.catalogo_atualizado",
+  "agenda.microsoft.renovacao_executada",
+  "agenda.microsoft.sync_executado",
+  "agenda.microsoft.publicacao_executada",
+  "agenda.microsoft.assinaturas_executadas",
+  "agenda.microsoft.decisao_registrada",
+  "agenda.selecao_atualizada",
+  "platform_microsoft_oauth.updated",
+  // (.62) — por qual número sai o aviso de grupo de cada empresa (o da
+  // plataforma ou um dela, com ou sem reserva): quem trocou, e para qual.
+  "platform.origem_do_aviso_alterada",
+
+  // Quem RESPONDE LEGALMENTE pela instalação, declarado em `platform_branding`
+  // (migration 0267). Linha própria e não `platform_branding.updated`: aquela
+  // é a fachada, esta é o texto jurídico público que nomeia uma empresa real
+  // como controladora dos dados. "Quem declarou isto, e quando?" é a pergunta
+  // que se faz depois de uma notificação da ANPD, e ela precisa de resposta
+  // sem depender de adivinhar quais campos um `fields_changed` genérico trazia.
+  "platform_branding.responsavel_legal_updated",
+  // O MCP de PLATAFORMA (item E6). DUAS linhas, e a separacao e o ponto:
+  // `executado` conta o que foi feito em nome de quem; `recusado` conta o que
+  // o escopo barrou. Sem a segunda, um token pedindo a mesma escrita todo dia
+  // — porque quem o configurou acha que ela deveria funcionar — nao aparece em
+  // lugar nenhum, e a conversa sobre "por que isso nao funciona" comeca sem
+  // dado. A recusa e informacao sobre o DESENHO, nao so sobre a tentativa.
+  "plataforma.mcp_executado",
+  "plataforma.mcp_recusado",
+  // Token de plataforma criado e revogado. Nao e `api_token.*`: aquele nasce
+  // dentro de um cliente e erra dentro dele; este administra todos.
+  "plataforma.token_criado",
+  "plataforma.token_revogado",
+  // uma chamada de importacao de base ou de materiais pelo MCP de
+  // plataforma (docs/fork/mcp-de-migracao.md). Fica DENTRO da organizacao que
+  // recebeu a base, com contagens e ids e sem nome, telefone ou e-mail: e o
+  // "trabalho de importacao" que `plataforma_ver_importacao` lista.
+  "plataforma.importacao",
+
+  // (MIA-169) · as conversões do site (docs/fork/conversoes-da-meta.md,
+  // "Conversões do site"): as regras garantidas ou ligadas pelo MCP de plataforma,
+  // e o evento de teste (dado fictício) mandado à Meta e ao Google.
+  "mia_regras_do_site.updated",
+  "mia_regras_do_site.testado",
+  // (migration 9017) — conversões da Meta por etapa do funil
+  // (docs/fork/conversoes-da-meta.md): quem mudou o que cada etapa informa à
+  // Meta, quem ligou a volta dos leads de formulário e quem pediu o reenvio de
+  // um evento de etapa. Nenhuma carrega token. O teste de conexão é leitura e
+  // não audita.
+  "conversoes_meta.regras_salvas",
+  "conversoes_meta.leads_de_formulario",
+  "conversoes_meta.reenvio_solicitado",
+
+  // documentos e obrigações com vencimento (migration 9018,
+  // docs/fork/obrigacoes.md). O metadata leva o tipo e as datas, nunca o nome
+  // de pessoa nem o conteúdo do arquivo.
+  "obrigacao.adicionada",
+  "obrigacao.editada",
+  "obrigacao.pedida",
+  "obrigacao.recebida",
+  "obrigacao.feita",
+  "obrigacao.arquivada",
+  "obrigacao.arquivo_anexado",
+  "obrigacao.proposta_confirmada",
+  "obrigacao.proposta_recusada",
+  "obrigacao.tipos_atualizados",
+  "obrigacao.tipo_arquivado",
+  "obrigacao.aviso_emitido",
+
+  // (.79, empresa única, docs/fork/empresa-unica.md): o cadastro de
+  // empresa passou a ser o do upstream (`companies`), e as portas de escrita são
+  // as funções `fn_mia_*` da 9034. Quem criou, mudou, excluiu, consultou na
+  // Receita e quem ligou ou tirou uma pessoa de uma empresa.
+  "empresas.criada",
+  "empresas.editada",
+  "empresas.excluida",
+  "empresas.consultada_na_receita",
+  "empresas.pessoa_vinculada",
+  "empresas.pessoa_desvinculada",
+  // Vários números da mesma pessoa viram uma pessoa só (e o desfazer).
+  "contatos.numeros_juntados",
+  "contatos.numero_separado",
+  // (9031): o link dos painéis prontos para o dono do negócio
+  // (`lib/paineis/link.ts`). Criar, alterar, revogar e renovar levam quem fez e por onde
+  // (tela ou MCP de plataforma); o acesso pela página pública é registrado sem
+  // identificar quem abriu (nem IP nem navegador). Nenhum leva o token.
+  "paineis.link_criado",
+  "paineis.link_revogado",
+  "paineis.link_renovado",
+  "paineis.link_alterado",
+  "paineis.link_acessado",
+
+  // (9040): o montador de relatórios (item 9, `lib/relatorios/`). Criar,
+  // alterar, compartilhar e apagar um relatório ou um painel levam quem fez e por
+  // onde (tela ou MCP de plataforma); exportar a planilha leva o quê e quantas
+  // linhas (a lista sai com nome e telefone: "cada exportação fica registrada").
+  // A garantia da implantação (`plataforma_garantir_relatorios`) registra o que criou.
+  "relatorios.criado",
+  "relatorios.alterado",
+  "relatorios.compartilhado",
+  "relatorios.apagado",
+  "relatorios.exportado",
+  "relatorios.painel_criado",
+  "relatorios.painel_alterado",
+  "relatorios.painel_apagado",
+  "relatorios.garantidos",
+
+  // (.88): o assistente da MIA (`lib/assistente/`, 9050). A pergunta
+  // leva só o que rodou (as ferramentas, se ficou sem resposta, o id da chamada
+  // de modelo), NUNCA o texto da pergunta nem o da resposta: esta tabela não sai
+  // pela cascata da LGPD. O chamado leva o número e o tipo, nunca o texto. O
+  // pedido à pessoa leva para quem; a configuração e a base própria, o que mudou
+  // e por onde (tela ou MCP de plataforma). O resumo da manhã é uma linha por
+  // rodada do cron que escreveu algum, com as contagens.
+  "assistente.perguntado",
+  "assistente.chamado_aberto",
+  "assistente.chamado_respondido",
+  "assistente.pedido_enviado",
+  "assistente.configurado",
+  "assistente.conhecimento_alterado",
+  "assistente.resumo_da_manha_gerado",
+  // (.93): as trilhas do "Me mostra como" (9090) e a lista de melhorias
+  // do produto (9091). A configuração leva o que mudou e por onde; a melhoria, o
+  // título e a situação (é texto da Time, nunca de cliente).
+  "assistente.trilhas_configuradas",
+  "assistente.melhoria_anotada",
+  // (.91): as propostas do assistente (9080) e os primeiros passos. A
+  // proposta leva o tipo, por onde (tela ou MCP) e os ids da peça criada, nunca
+  // o texto do agente; o follow-up que saiu com o agente, o fluxo e o agente.
+  // O número oficial "esperando a Time" leva só que a pessoa entrou com o
+  // Facebook (a conta da Meta é ligada à mão, pela Time).
+  "assistente.proposta_criada",
+  "assistente.proposta_aplicada",
+  "assistente.proposta_rejeitada",
+  "assistente.proposta_falhou",
+  "assistente.followup_saiu_com_o_agente",
+  // (.94): o assistente faz com aprovação. O pedido a quem aprova (com
+  // o cartão pronto), o ajuste antes de aprovar e o desfazer, todos "via
+  // assistente": quem pediu, quem aprovou e quem desfez vão no metadata, com o
+  // tipo e os ids da peça, nunca o texto dela. O desfazer recusado pela trava
+  // de uso também fica registrado.
+  "assistente.proposta_pedida",
+  "assistente.proposta_ajustada",
+  "assistente.proposta_desfeita",
+  "assistente.desfazer_travado",
+  "onboarding.numero_oficial_esperando_a_time",
+  "onboarding.agente_do_modelo_publicado",
+  // (.96, segunda frente) · a área de cobrança e o lado da Time
+  // (docs/fork/area-de-cobranca.md): o cartão trocado para as próximas
+  // mensalidades (só o resultado, NUNCA o cartão), o pedido "A nota saiu
+  // errada" (o número do chamado, o motivo e a cobrança, nunca o texto) e o
+  // cadastro sem pagamento apagado pela Time (os dias e o plano).
+  "area_de_cobranca.cartao_trocado",
+  "area_de_cobranca.nota_errada_pedida",
+  "pagamento_inicial.cadastro_apagado",
+
+  // (.99) · a cópia dos dados de cobrança da empresa baixada pela Time
+  // (LGPD, o acesso do titular): só quem baixou e a empresa, nunca o conteúdo.
+  "area_de_cobranca.dados_exportados",
+  // (.101) · o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
+  // O metadata leva ids, situação, contagens e prazos: nunca telefone de cliente,
+  // texto de conversa nem o código ou o token dos links.
+  "raio_x.criado",
+  "raio_x.link_de_conexao_gerado",
+  "raio_x.aceite",
+  "raio_x.conectado",
+  "raio_x.numero_diferente",
+  "raio_x.leitura_concluida",
+  "raio_x.relatorio_gerado",
+  "raio_x.relatorio_revisado",
+  "raio_x.link_do_dono_gerado",
+  "raio_x.link_do_dono_revogado",
+  "raio_x.link_do_dono_acessado",
+  "raio_x.desconectado",
+  "raio_x.encerrado",
+  "raio_x.conversas_apagadas",
+  "raio_x.mes_aberto",
+  "raio_x.alterado",
+  // (.105): ler de novo um raio-X pronto e ainda conectado.
+  "raio_x.relido",
+  // (.107) · o raio-X grátis por cadastro: a grátis pedida de novo, a
+  // entrada na área (o código no e-mail), o relatório entregue direto, a leitura
+  // sem histórico (a grátis não conta), os pedidos de nova análise e os preços.
+  // Nunca o código de acesso, o cookie, o CPF ou o CNPJ de quem paga.
+  "raio_x.cadastro_repetido",
+  "raio_x.entrou_na_area",
+  "raio_x.relatorio_entregue",
+  "raio_x.sem_historico",
+  "raio_x.pedido_criado",
+  "raio_x.pedido_pago",
+  "raio_x.pedido_cancelado",
+  "raio_x.precos_alterados",
+  // (.107): rodada do cron `ia-pendente` que pediu o turno da IA para a
+  // mensagem do cliente que chegou durante o silêncio (só quando pediu ou falhou).
+  "conversation.pending_reply_requested_run",
+  // (.108) · a trava de robô (docs/fork/trava-de-robo.md): a trava que
+  // disparou (o outro lado é um robô), o teto de respostas da IA na conversa, o
+  // ajuste da configuração pelo MCP e o desfazer. O metadata leva ids, contagens
+  // e os códigos do que falhou: nunca o texto das mensagens.
+  "ai.trava_de_robo_disparada",
+  "ai.trava_de_robo_teto",
+  "ai.trava_de_robo_configurada",
+  "ai.trava_de_robo_desfeita",
+  // (.109) · o produto no negócio (docs/fork/produto-no-negocio.md): a
+  // lista do bloco e o valor gravados (contagens, o modo do valor e o valor antes
+  // e depois), a palavra e as duas opções do funil pelo MCP de plataforma, e a
+  // palavra do segmento garantida na implantação.
+  "negocio.itens_alterados",
+  "funil.produto_no_negocio_configurado",
+  "funil.palavra_do_segmento_garantida",
+
+  // (9172, MIA-217) — a IA da empresa segue a da plataforma. As duas
+  // são gravadas pelo BANCO, uma linha por empresa alterada, com o par de antes
+  // e o de depois no metadata (só ids, nunca nome de empresa):
+  //   · `fn_mia_platform_ia_propaga`: a troca em /admin/modelo-de-ia mudou o
+  //     padrão desta empresa, que segue a plataforma (`por` = quem trocou);
+  //   · `fn_mia_ia_segue_a_plataforma_conserto`: a 9172 passou a empresa a
+  //     seguir a plataforma (`condicao` A, B ou C).
+  "ai.padrao_seguiu_a_plataforma",
+  "ai.padrao_passou_a_seguir_a_plataforma",
+  // ── fim do bloco da MIA; daqui para baixo, só o upstream ──
   // Módulo opcional `amigo` (#4227).
   "amigo.configured",
   "amigo.disconnected",
@@ -138,11 +518,6 @@ export const AUDIT_ACTIONS = [
   // ser membro. O REENVIO de um convite audita como `member.invited` — é uma
   // nova emissão do mesmo convite.
   "member.invite_revoked",
-  // FORK MIA (9023) — um LINK CURTO novo foi gerado para um convite pendente
-  // ("Copiar link do convite" na tela de Equipe, ou o MCP de plataforma). O
-  // anterior deixou de valer. A linha diz quem gerou e para qual convite; o
-  // código nunca entra (`lib/team/link-curto.ts`).
-  "member.invite_link_created",
   "token.created",
   "token.revoked",
   "profile.updated",
@@ -309,165 +684,6 @@ export const AUDIT_ACTIONS = [
   "platform_admin.incident_viewed",
   "incident.resolved",
   "platform_admin.usage_viewed",
-  // Saldo do provedor de IA: são lançamentos de DINHEIRO, e quem confere a conta
-  // depois precisa saber o que foi lançado (ou apagado), por quem e quando.
-  "platform_admin.ai_saldo_lancado",
-  "platform_admin.ai_saldo_lancamento_apagado",
-  "platform_admin.ai_cotacao_definida",
-  // Carteira do CLIENTE: crédito lançado e preço acordado são dinheiro dele, e
-  // o extrato não se apaga — a correção é outro lançamento, que também entra.
-  "platform_admin.carteira_lancada",
-  "platform_admin.carteira_preco_definido",
-  // Liberação por módulo: é contrato. Quem liberou, para quem, quando — e o
-  // cancelamento, que é a metade que costuma sumir.
-  "platform_admin.modulo_liberado",
-  "platform_admin.modulo_cancelado",
-  // Submeter template fala em nome da marca na Meta, e reprovação suja a conta
-  // inteira: quem submeteu, o quê e quando precisa ficar registrado.
-  "channels.template_criado",
-  "channels.template_editado",
-  "channels.template_excluido",
-  // MIA Broadcast: cada disparo gasta dinheiro do cliente. Quem mandou, para
-  // quantos e a que preço é a primeira pergunta quando a fatura é contestada.
-  "platform.numero_de_avisos_alterado",
-  "platform.modelo_de_ia_alterado",
-  "platform.cadastro_incorporado_alterado",
-  "platform.cadastro_incorporado_amarrado",
-  // FORK MIA (9164) — a coexistência do WhatsApp (docs/fork/coexistencia.md):
-  // quem ligou ou desligou a chave da empresa, o número que a empresa conectou
-  // pelo app WhatsApp Business e o canal por QR do mesmo número que saiu do ar.
-  "platform.coexistencia_alterada",
-  "channel.coexistencia_conectada",
-  "channel.coexistencia_qr_desligado",
-  "platform.report_alterado",
-  "platform.fila_morta_reprocessada",
-  "platform.precos_da_meta_alterados",
-  "empresas.mescladas",
-  "platform.grupo_de_avisos_alterado",
-  "broadcast.criado",
-  "broadcast.editado",
-  "broadcast.excluido",
-  // FORK MIA — cartão aberto (docs/fork/cartoes-e-fichas.md): a nota interna, as
-  // pessoas envolvidas num negócio e a confirmação do campo que a IA preencheu.
-  "lead.nota_adicionada",
-  "lead.contato_envolvido_incluido",
-  "lead.contato_envolvido_retirado",
-  "lead.campo_confirmado",
-  "broadcast.disparado",
-  // FORK MIA (.89) — o disparo de e-mail marketing (docs/fork/email-marketing.md):
-  // a configuração, o domínio, as campanhas (cada passo que gasta dinheiro ou
-  // fala com a base inteira), a supressão, os consentimentos importados, o
-  // descadastro e a reinscrição pela própria pessoa, os avisos da Amazon e a
-  // rodada do cron que mandou, pausou ou concluiu (a vazia não audita).
-  "email_marketing.configurado",
-  "email_marketing.dominio_conferido",
-  "email_marketing.remetente_salvo",
-  "email_marketing.texto_de_consentimento_salvo",
-  "email_marketing.segmento_salvo",
-  "email_marketing.campanha_criada",
-  "email_marketing.campanha_editada",
-  "email_marketing.teste_enviado",
-  "email_marketing.campanha_confirmada",
-  "email_marketing.campanha_pausada",
-  "email_marketing.campanha_retomada",
-  "email_marketing.campanha_cancelada",
-  "email_marketing.acao_sobre_cliques",
-  "email_marketing.supressao_acrescentada",
-  "email_marketing.supressao_importada",
-  "email_marketing.consentimentos_importados",
-  "email_marketing.descadastro",
-  "email_marketing.reinscricao",
-  "email_marketing.aviso_da_amazon",
-  "email_marketing.rodada",
-  "email_marketing.imagem_enviada",
-  // FORK MIA (.90) — a jornada de assinatura (docs/fork/jornada-de-assinatura.md):
-  // o plano que liga e desliga módulo (e a véspera da descida), os planos e os
-  // pacotes de crédito garantidos pela plataforma, e a compra de créditos por Pix.
-  "planos_mia.modulos_seguiram_o_plano",
-  "planos_mia.aviso_de_modulo_saindo",
-  "planos_mia.planos_garantidos",
-  "planos_mia.pacotes_garantidos",
-  "carteira.compra_iniciada",
-  "carteira.compra_confirmada",
-  // FORK MIA (.96) · o pagamento no início (docs/fork/pagamento-no-inicio.md): a
-  // cobrança gerada (forma), a refeita (troca do boleto ou de plano), a tentativa
-  // no cartão (só o resultado, NUNCA o cartão), a confirmação, a troca de plano
-  // antes de pagar, a forma escolhida no teste, o bloqueio no fim do teste sem
-  // pagamento, o lembrete do dia seguinte, os dados fiscais gravados e a
-  // configuração da nota fiscal pelo Asaas.
-  "pagamento_inicial.cobranca_gerada",
-  "pagamento_inicial.cobranca_refeita",
-  "pagamento_inicial.cartao_tentado",
-  "pagamento_inicial.confirmado",
-  "pagamento_inicial.plano_trocado",
-  "pagamento_inicial.forma_escolhida",
-  "pagamento_inicial.fim_do_teste_bloqueou",
-  "pagamento_inicial.lembrete_enviado",
-  "dados_fiscais.gravados",
-  "cobranca.nota_fiscal_configurada",
-  // FORK MIA (.98) · cupons, parceiros e comissão (docs/fork/cupons-e-parceiros.md):
-  // o cupom criado, mudado, pausado, aplicado, tirado e trocado pela Time; o parceiro
-  // criado, mudado, exportado e anonimizado (LGPD), a troca do parceiro de um cliente;
-  // o setup de implantação (pedido, cancelado, pago, estornado, o preço do plano); o
-  // mês fechado, o anexo, o pago e os extratos do repasse. Nunca documento nem Pix.
-  "cupom.criado",
-  "cupom.alterado",
-  "cupom.pausado",
-  "cupom.ativado",
-  "cupom.aplicado",
-  "cupom.tirado",
-  "cupom.trocado_pela_time",
-  "parceiro.criado",
-  "parceiro.alterado",
-  "parceiro.exportado",
-  "parceiro.anonimizado",
-  "parceiro.trocado_no_cliente",
-  "parceiros.rodada",
-  "parceiros.configuracao_gravada",
-  "setup.pedido",
-  "setup.cancelado",
-  "setup.pago",
-  "setup.estornado",
-  "setup.preco_do_plano",
-  "repasse.mes_fechado",
-  "repasse.anexo_gravado",
-  "repasse.marcado_pago",
-  "repasse.extratos_enviados",
-  // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
-  // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
-  // relógio que trouxe lead ou deu erro (a vazia não audita).
-  "leads_da_meta.configurado",
-  "leads_da_meta.formulario_salvo",
-  "leads_da_meta.lido_agora",
-  "leads_da_meta.rodada",
-  // FORK MIA (.61) — de qual empresa é cada Página da Meta (migration 9004): quem
-  // atribuiu ou retirou o dono, e qual empresa empresta a conexão da plataforma.
-  "platform.pagina_da_meta_atribuida",
-  "platform.pagina_da_meta_retirada",
-  "platform.conexao_da_meta_escolhida",
-  // FORK MIA (.64, migration 9008) — a empresa com conta própria da Meta assume
-  // e solta as Páginas dela: quem marcou ou desmarcou, e quantos formulários
-  // desligaram ao soltar.
-  "leads_da_meta.pagina_assumida",
-  "leads_da_meta.pagina_solta",
-  // FORK MIA (9011-9013) — a agenda do Outlook / Microsoft 365
-  // (docs/fork/agenda-microsoft.md): conectar, desconectar, a escolha das
-  // agendas, as rotinas e as decisões de conflito.
-  "agenda.microsoft.conexao_iniciada",
-  "agenda.microsoft.conexao_falhou",
-  "agenda.microsoft.conexao_concluida",
-  "agenda.microsoft.conexao_desconectada",
-  "agenda.microsoft.catalogo_atualizado",
-  "agenda.microsoft.renovacao_executada",
-  "agenda.microsoft.sync_executado",
-  "agenda.microsoft.publicacao_executada",
-  "agenda.microsoft.assinaturas_executadas",
-  "agenda.microsoft.decisao_registrada",
-  "agenda.selecao_atualizada",
-  "platform_microsoft_oauth.updated",
-  // FORK MIA (.62) — por qual número sai o aviso de grupo de cada empresa (o da
-  // plataforma ou um dela, com ou sem reserva): quem trocou, e para qual.
-  "platform.origem_do_aviso_alterada",
   "platform_admin.users_listed",
   "platform_admin.user_viewed",
   "platform_admin.platform_admins_listed",
@@ -795,30 +1011,6 @@ export const AUDIT_ACTIONS = [
   // veem, e a pergunta "quem repintou isto?" só tem resposta aqui: não há
   // event_log (nenhum handler consumiria o tipo — ver register-handlers.ts).
   "platform_branding.updated",
-  // Quem RESPONDE LEGALMENTE pela instalação, declarado em `platform_branding`
-  // (migration 0267). Linha própria e não `platform_branding.updated`: aquela
-  // é a fachada, esta é o texto jurídico público que nomeia uma empresa real
-  // como controladora dos dados. "Quem declarou isto, e quando?" é a pergunta
-  // que se faz depois de uma notificação da ANPD, e ela precisa de resposta
-  // sem depender de adivinhar quais campos um `fields_changed` genérico trazia.
-  "platform_branding.responsavel_legal_updated",
-  // O MCP de PLATAFORMA (item E6). DUAS linhas, e a separacao e o ponto:
-  // `executado` conta o que foi feito em nome de quem; `recusado` conta o que
-  // o escopo barrou. Sem a segunda, um token pedindo a mesma escrita todo dia
-  // — porque quem o configurou acha que ela deveria funcionar — nao aparece em
-  // lugar nenhum, e a conversa sobre "por que isso nao funciona" comeca sem
-  // dado. A recusa e informacao sobre o DESENHO, nao so sobre a tentativa.
-  "plataforma.mcp_executado",
-  "plataforma.mcp_recusado",
-  // Token de plataforma criado e revogado. Nao e `api_token.*`: aquele nasce
-  // dentro de um cliente e erra dentro dele; este administra todos.
-  "plataforma.token_criado",
-  "plataforma.token_revogado",
-  // FORK MIA — uma chamada de importacao de base ou de materiais pelo MCP de
-  // plataforma (docs/fork/mcp-de-migracao.md). Fica DENTRO da organizacao que
-  // recebeu a base, com contagens e ids e sem nome, telefone ou e-mail: e o
-  // "trabalho de importacao" que `plataforma_ver_importacao` lista.
-  "plataforma.importacao",
   // A política de cadastro da INSTALAÇÃO trocada em `platform_settings`
   // (migration 0233) — mutação de plataforma, sem `organization_id`. Auditável
   // porque decide quem consegue ENTRAR no sistema inteiro, e "por que ninguém
@@ -893,19 +1085,6 @@ export const AUDIT_ACTIONS = [
   "google_ads_conversion_action.created",
   // O que cada etapa do funil informa à Meta (0524) — o par da regra acima.
   "meta_ads_conversion_rules.updated",
-  // FORK MIA (MIA-169) · as conversões do site (docs/fork/conversoes-da-meta.md,
-  // "Conversões do site"): as regras garantidas ou ligadas pelo MCP de plataforma,
-  // e o evento de teste (dado fictício) mandado à Meta e ao Google.
-  "mia_regras_do_site.updated",
-  "mia_regras_do_site.testado",
-  // FORK MIA (migration 9017) — conversões da Meta por etapa do funil
-  // (docs/fork/conversoes-da-meta.md): quem mudou o que cada etapa informa à
-  // Meta, quem ligou a volta dos leads de formulário e quem pediu o reenvio de
-  // um evento de etapa. Nenhuma carrega token. O teste de conexão é leitura e
-  // não audita.
-  "conversoes_meta.regras_salvas",
-  "conversoes_meta.leads_de_formulario",
-  "conversoes_meta.reenvio_solicitado",
   // A conexão de LEITURA da organização com a conta de anúncios (0214).
   // Ação SEPARADA da de cima, e não um `metadata.purpose` na mesma: a pergunta
   // que cada trilha responde é diferente. "Quem apontou minhas vendas para este
@@ -1553,22 +1732,6 @@ export const AUDIT_ACTIONS = [
   // (#2098): gravada pela tela de Conversões, em `organizations.settings.conversions`.
   "conversions.meta_identity_updated",
 
-  // FORK MIA — documentos e obrigações com vencimento (migration 9018,
-  // docs/fork/obrigacoes.md). O metadata leva o tipo e as datas, nunca o nome
-  // de pessoa nem o conteúdo do arquivo.
-  "obrigacao.adicionada",
-  "obrigacao.editada",
-  "obrigacao.pedida",
-  "obrigacao.recebida",
-  "obrigacao.feita",
-  "obrigacao.arquivada",
-  "obrigacao.arquivo_anexado",
-  "obrigacao.proposta_confirmada",
-  "obrigacao.proposta_recusada",
-  "obrigacao.tipos_atualizados",
-  "obrigacao.tipo_arquivado",
-  "obrigacao.aviso_emitido",
-
   // O operador baixou o histórico de UMA conversa em PDF (issue #1982): o gesto
   // auditável é a saída de dados — QUANTAS linhas saíram, não o que elas dizem
   // (o corpo da mensagem não vai para log nem para metadata, LGPD).
@@ -1699,43 +1862,6 @@ export const AUDIT_ACTIONS = [
   // dedicada `PATCH /contacts/[id]/carteira` (#2591) — a escrita é do servidor,
   // então o audit é a única trilha de quem mudou o dono.
   "contact.carteira_changed",
-  // FORK MIA (.79, empresa única, docs/fork/empresa-unica.md): o cadastro de
-  // empresa passou a ser o do upstream (`companies`), e as portas de escrita são
-  // as funções `fn_mia_*` da 9034. Quem criou, mudou, excluiu, consultou na
-  // Receita e quem ligou ou tirou uma pessoa de uma empresa.
-  "empresas.criada",
-  "empresas.editada",
-  "empresas.excluida",
-  "empresas.consultada_na_receita",
-  "empresas.pessoa_vinculada",
-  "empresas.pessoa_desvinculada",
-  // Vários números da mesma pessoa viram uma pessoa só (e o desfazer).
-  "contatos.numeros_juntados",
-  "contatos.numero_separado",
-  // FORK MIA (9031): o link dos painéis prontos para o dono do negócio
-  // (`lib/paineis/link.ts`). Criar, alterar, revogar e renovar levam quem fez e por onde
-  // (tela ou MCP de plataforma); o acesso pela página pública é registrado sem
-  // identificar quem abriu (nem IP nem navegador). Nenhum leva o token.
-  "paineis.link_criado",
-  "paineis.link_revogado",
-  "paineis.link_renovado",
-  "paineis.link_alterado",
-  "paineis.link_acessado",
-
-  // FORK MIA (9040): o montador de relatórios (item 9, `lib/relatorios/`). Criar,
-  // alterar, compartilhar e apagar um relatório ou um painel levam quem fez e por
-  // onde (tela ou MCP de plataforma); exportar a planilha leva o quê e quantas
-  // linhas (a lista sai com nome e telefone: "cada exportação fica registrada").
-  // A garantia da implantação (`plataforma_garantir_relatorios`) registra o que criou.
-  "relatorios.criado",
-  "relatorios.alterado",
-  "relatorios.compartilhado",
-  "relatorios.apagado",
-  "relatorios.exportado",
-  "relatorios.painel_criado",
-  "relatorios.painel_alterado",
-  "relatorios.painel_apagado",
-  "relatorios.garantidos",
   // A chave POR GRUPO "Permitir que a IA responda neste grupo" (#2729,
   // migration 0653). Duas ações, e não `channel.group_enabled` com um campo no
   // metadata: ligar o grupo (entrar na inbox, mexer no filtro do WhatsApp) e
@@ -1840,54 +1966,6 @@ export const AUDIT_ACTIONS = [
   // papel — nunca o texto do papel, que é livre.
   "lead.participant_added",
   "lead.participant_removed",
-  // FORK MIA (.88): o assistente da MIA (`lib/assistente/`, 9050). A pergunta
-  // leva só o que rodou (as ferramentas, se ficou sem resposta, o id da chamada
-  // de modelo), NUNCA o texto da pergunta nem o da resposta: esta tabela não sai
-  // pela cascata da LGPD. O chamado leva o número e o tipo, nunca o texto. O
-  // pedido à pessoa leva para quem; a configuração e a base própria, o que mudou
-  // e por onde (tela ou MCP de plataforma). O resumo da manhã é uma linha por
-  // rodada do cron que escreveu algum, com as contagens.
-  "assistente.perguntado",
-  "assistente.chamado_aberto",
-  "assistente.chamado_respondido",
-  "assistente.pedido_enviado",
-  "assistente.configurado",
-  "assistente.conhecimento_alterado",
-  "assistente.resumo_da_manha_gerado",
-  // FORK MIA (.93): as trilhas do "Me mostra como" (9090) e a lista de melhorias
-  // do produto (9091). A configuração leva o que mudou e por onde; a melhoria, o
-  // título e a situação (é texto da Time, nunca de cliente).
-  "assistente.trilhas_configuradas",
-  "assistente.melhoria_anotada",
-  // FORK MIA (.91): as propostas do assistente (9080) e os primeiros passos. A
-  // proposta leva o tipo, por onde (tela ou MCP) e os ids da peça criada, nunca
-  // o texto do agente; o follow-up que saiu com o agente, o fluxo e o agente.
-  // O número oficial "esperando a Time" leva só que a pessoa entrou com o
-  // Facebook (a conta da Meta é ligada à mão, pela Time).
-  "assistente.proposta_criada",
-  "assistente.proposta_aplicada",
-  "assistente.proposta_rejeitada",
-  "assistente.proposta_falhou",
-  "assistente.followup_saiu_com_o_agente",
-  // FORK MIA (.94): o assistente faz com aprovação. O pedido a quem aprova (com
-  // o cartão pronto), o ajuste antes de aprovar e o desfazer, todos "via
-  // assistente": quem pediu, quem aprovou e quem desfez vão no metadata, com o
-  // tipo e os ids da peça, nunca o texto dela. O desfazer recusado pela trava
-  // de uso também fica registrado.
-  "assistente.proposta_pedida",
-  "assistente.proposta_ajustada",
-  "assistente.proposta_desfeita",
-  "assistente.desfazer_travado",
-  "onboarding.numero_oficial_esperando_a_time",
-  "onboarding.agente_do_modelo_publicado",
-  // FORK MIA (.96, segunda frente) · a área de cobrança e o lado da Time
-  // (docs/fork/area-de-cobranca.md): o cartão trocado para as próximas
-  // mensalidades (só o resultado, NUNCA o cartão), o pedido "A nota saiu
-  // errada" (o número do chamado, o motivo e a cobrança, nunca o texto) e o
-  // cadastro sem pagamento apagado pela Time (os dias e o plano).
-  "area_de_cobranca.cartao_trocado",
-  "area_de_cobranca.nota_errada_pedida",
-  "pagamento_inicial.cadastro_apagado",
   // Anexos de negócios / leads (#2829): upload e remoção de arquivo em campo customizado
   "lead.attachment_uploaded",
   "lead.attachment_deleted",
@@ -1959,60 +2037,6 @@ export const AUDIT_ACTIONS = [
   // Aviso escrito pelo admin da empresa e empurrado para a equipe (#1418). O
   // metadata leva só a janela de publicação; título e corpo ficam em `avisos`.
   "aviso.created",
-  // FORK MIA (.99) · a cópia dos dados de cobrança da empresa baixada pela Time
-  // (LGPD, o acesso do titular): só quem baixou e a empresa, nunca o conteúdo.
-  "area_de_cobranca.dados_exportados",
-  // FORK MIA (.101) · o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
-  // O metadata leva ids, situação, contagens e prazos: nunca telefone de cliente,
-  // texto de conversa nem o código ou o token dos links.
-  "raio_x.criado",
-  "raio_x.link_de_conexao_gerado",
-  "raio_x.aceite",
-  "raio_x.conectado",
-  "raio_x.numero_diferente",
-  "raio_x.leitura_concluida",
-  "raio_x.relatorio_gerado",
-  "raio_x.relatorio_revisado",
-  "raio_x.link_do_dono_gerado",
-  "raio_x.link_do_dono_revogado",
-  "raio_x.link_do_dono_acessado",
-  "raio_x.desconectado",
-  "raio_x.encerrado",
-  "raio_x.conversas_apagadas",
-  "raio_x.mes_aberto",
-  "raio_x.alterado",
-  // FORK MIA (.105): ler de novo um raio-X pronto e ainda conectado.
-  "raio_x.relido",
-  // FORK MIA (.107) · o raio-X grátis por cadastro: a grátis pedida de novo, a
-  // entrada na área (o código no e-mail), o relatório entregue direto, a leitura
-  // sem histórico (a grátis não conta), os pedidos de nova análise e os preços.
-  // Nunca o código de acesso, o cookie, o CPF ou o CNPJ de quem paga.
-  "raio_x.cadastro_repetido",
-  "raio_x.entrou_na_area",
-  "raio_x.relatorio_entregue",
-  "raio_x.sem_historico",
-  "raio_x.pedido_criado",
-  "raio_x.pedido_pago",
-  "raio_x.pedido_cancelado",
-  "raio_x.precos_alterados",
-  // FORK MIA (.107): rodada do cron `ia-pendente` que pediu o turno da IA para a
-  // mensagem do cliente que chegou durante o silêncio (só quando pediu ou falhou).
-  "conversation.pending_reply_requested_run",
-  // FORK MIA (.108) · a trava de robô (docs/fork/trava-de-robo.md): a trava que
-  // disparou (o outro lado é um robô), o teto de respostas da IA na conversa, o
-  // ajuste da configuração pelo MCP e o desfazer. O metadata leva ids, contagens
-  // e os códigos do que falhou: nunca o texto das mensagens.
-  "ai.trava_de_robo_disparada",
-  "ai.trava_de_robo_teto",
-  "ai.trava_de_robo_configurada",
-  "ai.trava_de_robo_desfeita",
-  // FORK MIA (.109) · o produto no negócio (docs/fork/produto-no-negocio.md): a
-  // lista do bloco e o valor gravados (contagens, o modo do valor e o valor antes
-  // e depois), a palavra e as duas opções do funil pelo MCP de plataforma, e a
-  // palavra do segmento garantida na implantação.
-  "negocio.itens_alterados",
-  "funil.produto_no_negocio_configurado",
-  "funil.palavra_do_segmento_garantida",
   // A prospecção perguntou ao WhatsApp (`numeroTemConta` do canal) se os telefones de
   // uma campanha têm WhatsApp, e tirou da seleção quem não tem
   // (`lib/prospecting/whatsapp.ts`). UMA linha por campanha por rodada e só com
@@ -2030,15 +2054,6 @@ export const AUDIT_ACTIONS = [
   // 9096), na organização NOVA, com o id do molde e as contagens no metadata;
   // quem lê é Painel › Empresas › [empresa] ("IA copiada do molde").
   "ai.molde_de_ia_aplicado",
-  // FORK MIA (9172, MIA-217) — a IA da empresa segue a da plataforma. As duas
-  // são gravadas pelo BANCO, uma linha por empresa alterada, com o par de antes
-  // e o de depois no metadata (só ids, nunca nome de empresa):
-  //   · `fn_mia_platform_ia_propaga`: a troca em /admin/modelo-de-ia mudou o
-  //     padrão desta empresa, que segue a plataforma (`por` = quem trocou);
-  //   · `fn_mia_ia_segue_a_plataforma_conserto`: a 9172 passou a empresa a
-  //     seguir a plataforma (`condicao` A, B ou C).
-  "ai.padrao_seguiu_a_plataforma",
-  "ai.padrao_passou_a_seguir_a_plataforma",
   // #4023: a organização ligou/desligou a pesquisa de satisfação e, quando
   // ligada, mudou a janela ou o texto em `organizations.settings.satisfacao`.
   // metadata só com o `ligado` — o texto é configuração, não dado de cliente.
