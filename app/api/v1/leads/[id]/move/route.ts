@@ -38,6 +38,7 @@ import {
 import { traduzir } from "@/lib/i18n/dicionario";
 // FORK MIA (.109): "Pedir o produto ao marcar como ganho" (docs/fork/produto-no-negocio.md).
 import { recusaDoProdutoNoGanho } from "@/lib/produto-no-negocio/servidor";
+import { recusaDeCopiaAbertaPeloBanco } from "@/lib/leads/copia-aberta-no-funil";
 
 export const dynamic = "force-dynamic";
 
@@ -299,6 +300,10 @@ export async function POST(
     // chegar aqui como 500 — que é o defeito, com outro nome.
     const recusa = recusaDeMotivoDaPerdaPeloBanco(updErr, idioma);
     if (recusa) return fail(recusa.codigo, recusa.mensagem, 422, { requestId });
+    // Reabrir a cópia encerrada quando o negócio já tem outra aberta neste funil
+    // (índice único da 9496, #5281): recusa de negócio, não 500.
+    const copiaAberta = recusaDeCopiaAbertaPeloBanco(updErr, idioma);
+    if (copiaAberta) return fail(copiaAberta.codigo, copiaAberta.mensagem, 409, { requestId });
     return fail("internal_error", updErr.message, 500, { requestId });
   }
 

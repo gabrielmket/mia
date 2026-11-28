@@ -78,17 +78,19 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
       "Postgres e aplica o baseline (p90 medido de uma passada: 325s). O 30 era DECLARADO, não " +
       "medido. Em 10/11/2026 ele passou a cortar por relógio: pg15 e pg17 cancelados aos 30 min, " +
       "também na `main`, e o #3590, pronto e provado pela tela, cortado três vezes seguidas. " +
-      "45 com ok do dono (doc de decisão 302). Se voltar a bater no teto, a pergunta é por que a " +
-      "passada cresceu, não subir de novo. FORK MIA (.101), MEDIDO: na ponta da .100 a perna do " +
-      "pg15 levou 28,5 min; no PR da .101 morreu por relógio duas vezes seguidas com 523 dos 597 " +
-      "arquivos verdes e nenhum vermelho (o pg17 passou inteiro). FORK MIA (.110), MEDIDO (tempo " +
-      "do job, 17/11/2026): na ponta do #86 (d71628e7e) pg15 e pg17 levaram 36 min, na " +
-      "repetição; na main da .110 (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado aos " +
-      "45; no PR #89 o pg17 foi cortado aos 45 nas duas rodadas seguidas. Daí 60, provisório " +
-      "até a fusão MIA-12. FORK MIA (MIA-71), MEDIDO em 18/11/2026 (7 rodadas verdes): 51 a 57 " +
-      "min por perna, e o passo do `update.sh` leva só 0,2 a 0,4 min — o peso é o vitest do " +
-      "`test:db`, então a matriz virou major × fatia (`--shard=N/3`) e o `update.sh` roda na " +
-      "fatia 1. O 60 fica até a medição das fatias; o teto é rede de segurança, não régua",
+      "45 com ok do dono (doc de decisão 302). Em 26/11/2026 voltou a cortar: de 25/11 em diante, 60 " +
+      "rodadas, verde de 28 a 44 min e 10 cortes aos 45 (8 no runner da GitHub, 2 na VPS). 60 com ok " +
+      "do dono (doc 421, issue #1149). Se o 60 também apertar, a saída é dividir a perna " +
+      "(`test:db` e `test:db:update` em jobs separados), não subir de novo. FORK MIA (.101), MEDIDO: " +
+      "na ponta da .100 a perna do pg15 levou 28,5 min; no PR da .101 morreu por relógio duas vezes " +
+      "seguidas com 523 dos 597 arquivos verdes e nenhum vermelho (o pg17 passou inteiro). FORK MIA " +
+      "(.110), MEDIDO (tempo do job, 17/11/2026): na ponta do #86 (d71628e7e) pg15 e pg17 levaram 36 " +
+      "min, na repetição; na main da .110 (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado " +
+      "aos 45; no PR #89 o pg17 foi cortado aos 45 nas duas rodadas seguidas. FORK MIA (MIA-71), " +
+      "MEDIDO em 18/11/2026 (7 rodadas verdes): 51 a 57 min por perna, e o passo do `update.sh` leva " +
+      "só 0,2 a 0,4 min — o peso é o vitest do `test:db`, então a matriz virou major × fatia " +
+      "(`--shard=N/3`) e o `update.sh` roda na fatia 1. Na v1.127 o upstream chegou ao mesmo 60; o " +
+      "teto é rede de segurança, não régua",
   },
 };
 

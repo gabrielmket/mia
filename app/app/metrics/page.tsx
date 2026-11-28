@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { createClient } from "@/lib/supabase/server";
 
 import { MetricsClient } from "./_components/MetricsClient";
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: "Desempenho" };
 export default async function MetricsPage() {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
+  const canRead = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
   // spec 13 §6.1: agent vê as próprias (RLS); a comparação por atendente é manager+.
   const canCompare = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   // `t` local em vez do hook: esta página é componente de SERVIDOR, e lá o
@@ -29,7 +31,7 @@ export default async function MetricsPage() {
   // corta a lista: ganho de funil arquivado continua sendo ganho do período, e
   // esconder o funil esconderia justamente o número que se quer explicar.
   const supabase = await createClient();
-  const { data: funisDaOrg } = activeOrg
+  const { data: funisDaOrg } = canRead && activeOrg
     ? await supabase
         .from("crm_pipelines")
         .select("id, name")
@@ -45,8 +47,8 @@ export default async function MetricsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t("Desempenho")}</h1>
           <p className="text-sm text-muted-foreground">
             {canCompare
-              ? t("Atrito, funil e performance por atendente nos últimos 30 dias.")
-              : t("Atrito, seu funil e sua performance nos últimos 30 dias.")}
+              ? t("Atrito, funil e desempenho por atendente.")
+              : t("Atrito, seu funil e seu desempenho.")}
           </p>
         </div>
         {/* FORK MIA (item 8): as duas portas da área de relatórios que moram ao
@@ -79,7 +81,18 @@ export default async function MetricsPage() {
           (relatório), e só então onde os negócios estão parados (funil). */}
       {canCompare ? <RelatorioDeVendas /> : null}
 
-      <MetricsClient canCompare={canCompare} currentUserId={user.id} funis={funis} />
+      {canRead ? (
+        <MetricsClient
+          canCompare={canCompare}
+          currentUserId={user.id}
+          fuso={fusoUtilizavel(activeOrg.timezone)}
+          funis={funis}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {t("Você não tem permissão para consultar as métricas de desempenho.")}
+        </p>
+      )}
     </div>
   );
 }

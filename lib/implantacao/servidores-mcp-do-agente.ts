@@ -48,6 +48,7 @@ import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { apagado, cifrar, ultimos4 } from "@/lib/mcp/servidor-externo/cifra";
 import { urlDoCallbackMcp } from "@/lib/mcp/servidor-externo/do-agente/enderecos";
 import { descobrir, ErroDeOauth, registrarCliente, type CodigoDeErroOauth } from "@/lib/mcp/servidor-externo/do-agente/oauth";
+import { prazoDoLinkEmMinutos } from "@/lib/mcp/servidor-externo/do-agente/prazo-do-link";
 import {
   conferirEndpointDoServidor,
   EntradaDoServidorSchema,
@@ -393,7 +394,15 @@ export async function planejarServidoresDoAgente(
         throw new Recusa(`O servidor «${nome}» não pôde ser cadastrado com OAuth: ${FRASE_DO_OAUTH[codigo]}. Nada foi gravado.`);
       }
       if (mudouEndereco) mudou = true;
-      colunas.oauth_metadados = metadados;
+      // Upstream v1.127 (#5126), na mesma conta de `salvarServidorMcpDoAgente`: o
+      // prazo em que o link de autorização pode ser aberto é do SERVIDOR, não do
+      // endereço. A descoberta refeita (endereço novo) não pode apagar o que a tela
+      // gravou; sem prazo gravado, vale o padrão (10). O MCP ainda não recebe o
+      // campo (docs/fork/mcp-de-implantacao.md, "Falta no MCP" da 1.127).
+      colunas.oauth_metadados = {
+        ...metadados,
+        prazo_do_link_minutos: prazoDoLinkEmMinutos(atual?.oauth?.prazo_do_link_minutos),
+      } satisfies MetadadosOauth;
       colunas.oauth_client_id = clientId;
       // Cliente do registro dinâmico é público: segredo NUNCA é gravado.
       if (metadados.cliente_dinamico) Object.assign(colunas, apagado("oauth_client_secret"));
