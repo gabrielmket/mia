@@ -193,7 +193,10 @@ describe("e2e-build: o encaixe com as partes e o agregador", () => {
       HEAD_VELHO: "nao",
     };
     const rodar = (partes: string) =>
-      spawnSync("bash", ["-c", script], { env: { ...env, PARTES: partes }, stdio: "pipe" }).status;
+      spawnSync("bash", ["-c", script], {
+        env: { ...env, PARTES: partes } as unknown as NodeJS.ProcessEnv,
+        stdio: "pipe",
+      }).status;
     expect(rodar("success"), "controle: partes verdes passam").toBe(0);
     expect(rodar("skipped")).not.toBe(0);
   });
@@ -211,7 +214,7 @@ describe("scripts/e2e-next-public-sha256.sh", () => {
     const dir = mkdtempSync(join(tmpdir(), "next-public-"));
     writeFileSync(join(dir, ".env.e2e"), `${linhas.join("\n")}\n`);
     const r = spawnSync("bash", ["scripts/e2e-next-public-sha256.sh", dir], {
-      env: { PATH: process.env.PATH, ...extra },
+      env: { PATH: process.env.PATH, ...extra } as unknown as NodeJS.ProcessEnv,
       stdio: "pipe",
       encoding: "utf-8",
     });
