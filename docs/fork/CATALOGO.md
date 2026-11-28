@@ -264,12 +264,13 @@ pagamento). **Mora em** `lib/area-de-cobranca/`, `components/area-de-cobranca/`,
 `app/admin/(protected)/empresas-do-cadastro/page.tsx` (funil, coluna e botão),
 `components/pagamento-inicial/CamposFiscais.tsx` (prop `documentoTravado`),
 `lib/mcp-plataforma/ferramentas/plataforma.ts` (`cobrancas` no `plataforma_ver_cliente`),
-`easypanel/bootstrap.sh` (reaplica o schema quando só sobra deadlock), `lib/assistente/manuais-das-telas.ts`.
+`easypanel/bootstrap.sh` (aplica o schema com espera curta por lock e repete a passada inteira, até 3 vezes, quando algum comando perde a disputa; MIA-348), `lib/assistente/manuais-das-telas.ts`.
 
 **Protege.** `tests/unit/area-de-cobranca-regras.test.ts`, `area-de-cobranca-leitura.test.ts`,
 `area-de-cobranca-servico.test.ts`, `area-de-cobranca-cartao-fora-dos-registros.test.ts`,
 `area-de-cobranca.test.ts`, `cadastro-sem-pagamento-apagar.test.ts`,
-`bootstrap-reaplica-no-deadlock.test.ts`, `mcp-de-implantacao-area-de-cobranca.test.ts`.
+`bootstrap-reaplica-no-deadlock.test.ts`, `baseline-do-upstream-zera-o-lock-timeout.test.ts`,
+`mcp-de-implantacao-area-de-cobranca.test.ts`; a etapa 3b do `scripts/ensaio-de-banco.sh`.
 
 **Conferir.**
 1. `git grep -n "FORK MIA" -- app/app/settings/billing/page.tsx app/admin/\(protected\)/empresas-do-cadastro/page.tsx easypanel/bootstrap.sh`.
