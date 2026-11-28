@@ -45,6 +45,10 @@ check() {
 mkdir -p "$TMP/bin"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/crond"
 chmod +x "$TMP/bin/crond"
+# FORK MIA (MIA-341): cada linha do crontab começa por `sleep <atraso>;` (até
+# 45 s). As provas abaixo rodam linhas inteiras; sem o dublê elas dormiriam.
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/sleep"
+chmod +x "$TMP/bin/sleep"
 
 rodar() { # $1 = valor de INTERNAL_SECRET ("" = ausente)
   local out="$TMP/crontab"
