@@ -68,7 +68,14 @@ import {
   type ChaveDeOrcamento,
 } from './orcamento';
 import { custoPelaTarifa, tarifaDoPrecoDaInstalacao } from './preco-do-catalogo';
-import { corpoComoObjeto, custoInformadoPeloOpenRouter, custoPorPassosComFaixaLonga, costCents, gravacaoDeUmaHora } from './pricing';
+import {
+  corpoComoObjeto,
+  custoInformadoPeloOpenRouter,
+  custoPorPassosComDegrauDoHaiku,
+  custoPorPassosComFaixaLonga,
+  costCents,
+  gravacaoDeUmaHora,
+} from './pricing';
 import { custoDoModeloForaDoMotor, precoDaInstalacao } from './pricing-do-catalogo';
 import { decidirCustoDaChamada, haUsoMedido } from './custo-da-chamada';
 import { chaveDeOrcamentoDaInstalacao } from '../../../instalacao/comportamento';
@@ -1797,8 +1804,9 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // preço da linha sai do catálogo da INSTALAÇÃO (`ai_models`/`ai_pricing`, as
   // mesmas tabelas que `lib/ai/cost.ts` e `lib/ai/runtime/cost.ts` já consultam).
   // Sem preço em nenhum dos dois o custo continua `null` — mas com aviso no log,
-  // nunca calado, e nunca um 0 inventado. Modelos com faixa longa usam a
-  // mesma tabela por passo, pois a soma do turno não determina o preço.
+  // nunca calado, e nunca um 0 inventado. Modelos com faixa longa e o degrau do
+  // Haiku 5.5 (#5017) usam a mesma tabela por passo, pois a soma do turno não
+  // determina o preço.
   //
   // FORK MIA — o fork resolvia isto desde 16/09 (`preco-do-catalogo.ts`, o
   // modelo padrão de OpenAI gravava custo nulo). Na v1.85 o upstream fez o
@@ -1832,7 +1840,9 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       : undefined;
   const daTabelaDoMotor =
     informado === undefined
-      ? (custoPorPassosComFaixaLonga(model, result) ?? costCents(model, usage, cfg.cacheTtl ?? '1h'))
+      ? (custoPorPassosComFaixaLonga(model, result) ??
+        custoPorPassosComDegrauDoHaiku(model, result, cfg.cacheTtl ?? '1h') ??
+        costCents(model, usage, cfg.cacheTtl ?? '1h'))
       : null;
   // FORK MIA: o catálogo da instalação entra pela REGRA ÚNICA dele
   // (`decidirCustoDaChamada`), mas a conta da linha de preço é a nossa

@@ -23,6 +23,7 @@ import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/C
 import { ContactTagsEditor } from "@/components/inbox/ContactTagsEditor";
 import { lerRecorrenciaDoFormulario } from "@/lib/leads/valor-recorrente";
 import { EcoDoValor } from "./EcoDoValor";
+import { ContatoDoNegocioEscolhido } from "./ContatoDoNegocioEscolhido";
 import type { CampoConfirmadoDoDocumento } from "./RevisaoDoDocumento";
 // FORK MIA (.109): o bloco de itens do negócio e o valor que soma
 // (docs/fork/produto-no-negocio.md). O rascunho, o bloco e o campo moram no fork.
@@ -86,6 +87,13 @@ interface Props {
    * sendo o de sempre — não é a mesma régua de espaço.
    */
   descricaoAlta?: boolean;
+  /**
+   * FORK MIA (fusão v1.126): mostra o "Contato do negócio" do upstream (#852 S3),
+   * a escolha entre os contatos que já existem. No upstream ele mora na cópia
+   * dos campos dentro do `EditLeadDialog`; aqui o diálogo usa este formulário e
+   * liga a prop. Só o `contact_id` que MUDOU viaja no PATCH.
+   */
+  escolherContato?: boolean;
 }
 
 function centsToReais(cents: number | null | undefined): string {
@@ -116,6 +124,7 @@ export function LeadFieldsForm({
   podeVerEquipe = false,
   controle,
   descricaoAlta = false,
+  escolherContato = false,
 }: Props) {
   const t = useT();
   const org = useActiveOrg();
@@ -142,11 +151,21 @@ export function LeadFieldsForm({
   // FORK MIA (fusão v1.124): com item no bloco, o valor continua sendo o dos
   // itens (ou o digitado à mão) e o banco desfaz a troca pela soma das vendas
   // (9167). O campo só vira "soma das vendas" quando o negócio não tem item.
-  const valorPelasVendas = valorSegueAsVendas({ vendas: vendasDoNegocio.length, itens: itens.rascunho?.itens });
-  const somaDasVendas = vendasDoNegocio.reduce(
-    (soma, v) => soma + (v.currency.toUpperCase() === moedaDoValor.toUpperCase() ? v.valor_cents : 0),
-    0,
-  );
+  // Upstream v1.126 (#5228): a marca gravada `valor_pelas_vendas` conta como
+  // venda enquanto a lista não chega, para o Salvar não reescrever a soma.
+  const valorPelasVendas = valorSegueAsVendas({
+    vendas: vendasDoNegocio.length > 0 ? vendasDoNegocio.length : lead.valor_pelas_vendas === true ? 1 : 0,
+    itens: itens.rascunho?.itens,
+  });
+  const somaDasVendas =
+    vendasDoNegocio.length > 0
+      ? vendasDoNegocio.reduce(
+          (soma, v) => soma + (v.currency.toUpperCase() === moedaDoValor.toUpperCase() ? v.valor_cents : 0),
+          0,
+        )
+      : (lead.value_cents ?? 0);
+  // FORK MIA (fusão v1.126): o contato escolhido no diálogo (ver `escolherContato`).
+  const [contactId, setContactId] = useState<string | null>(lead.contact_id ?? null);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
   // A RÉGUA do diff (issue #2132): o valor carregado ao abrir. Só o que a
   // pessoa mudar daqui vai viajar — devolver o objeto inteiro sobrescrevia o
@@ -181,6 +200,8 @@ export function LeadFieldsForm({
     });
     setCustomFields(lead.custom_fields ?? {});
     setCamposCarregados(lead.custom_fields ?? {});
+    // Outro negócio no mesmo formulário não herda o contato escolhido no anterior.
+    setContactId(lead.contact_id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
@@ -294,6 +315,9 @@ export function LeadFieldsForm({
         ? { custom_fields: soChavesAlteradas(camposCarregados, customFields) }
         : {}),
     };
+    // FORK MIA (fusão v1.126, #852 S3): só quando MUDOU. Reenviar o contato de
+    // sempre faria o PATCH parecer uma troca a cada salvamento.
+    if (escolherContato && contactId !== (lead.contact_id ?? null)) patch.contact_id = contactId;
 
     const parsed = updateLeadSchema.safeParse(patch);
     if (!parsed.success) {
@@ -334,6 +358,12 @@ export function LeadFieldsForm({
             {...form.register("title", { required: true, minLength: 2 })}
           />
         </div>
+
+        {/* FORK MIA (fusão v1.126): o CONTATO acima dos outros campos, como no
+            upstream: é ele que decide se a IA e o WhatsApp têm para quem falar. */}
+        {escolherContato && (
+          <ContatoDoNegocioEscolhido contactId={contactId} onEscolher={setContactId} />
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="description">{t("Descrição")}</Label>
@@ -415,7 +445,9 @@ export function LeadFieldsForm({
             </div>
             {valorPelasVendas ? (
               <p className="text-xs text-text-muted" data-testid="valor-pelas-vendas-legenda">
-                {t("Soma de")} {vendasDoNegocio.length} {t("venda(s) registrada(s)")}
+                {vendasDoNegocio.length > 0
+                  ? `${t("Soma de")} ${vendasDoNegocio.length} ${t("venda(s) registrada(s)")}`
+                  : t("Soma das vendas registradas")}
               </p>
             ) : (
               <EcoDoValor control={form.control} moeda={moedaDoValor} />
