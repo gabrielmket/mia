@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { COLUNAS_DE_IA_FECHADAS } from "@/lib/ai/colunas-de-ia-fechadas";
+import { COLUNAS_DE_IA_FECHADAS, ehColunaDeIaFechada } from "@/lib/ai/colunas-de-ia-fechadas";
 
 import { lastLine, sql } from "./gov-helpers";
 
@@ -38,8 +38,13 @@ const TRACO = "f9175000-7777-4000-8000-000000000001";
 
 const TABELAS = ["llm_calls", "agent_turn_traces", "ai_agent_runs"] as const;
 
-/** As colunas fechadas que cada tabela tem hoje (a regra: as nomeadas e toda com `tokens`). */
-const FECHADAS: Record<(typeof TABELAS)[number], string[]> = {
+/**
+ * O piso: as colunas fechadas que cada tabela já tem. A lista que os testes
+ * percorrem sai do catálogo pela regra (`fechadas()`), para que coluna de tokens
+ * que o upstream criar (ex.: `llm_calls.cache_write_1h_tokens`, 9481) também seja
+ * provada uma a uma, sem ninguém lembrar de acrescentar aqui.
+ */
+const FECHADAS_DE_HOJE: Record<(typeof TABELAS)[number], string[]> = {
   llm_calls: ["provider", "model", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_cents", "entrada_do_primeiro_passo"],
   agent_turn_traces: ["provider", "model", "tokens_in", "tokens_out", "cost_cents"],
   ai_agent_runs: ["tokens_in", "tokens_out", "cost_cents"],
@@ -72,6 +77,22 @@ const comoMembro = (consulta: string) => lastLine(sql(`${COMO_MEMBRO}\n${consult
 
 function privilegio(papel: string, tabela: string, priv: string): boolean {
   return lastLine(sql(`select has_table_privilege('${papel}', 'public.${tabela}', '${priv}')::text;`)) === "true";
+}
+
+/** As colunas da tabela que a regra fecha, lidas do catálogo (com o piso conferido). */
+function fechadas(tabela: (typeof TABELAS)[number]): string[] {
+  const colunas = lastLine(
+    sql(`select string_agg(column_name::text, ',' order by ordinal_position)
+           from information_schema.columns where table_schema = 'public' and table_name = '${tabela}';`),
+  )
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const doCatalogo = colunas.filter(ehColunaDeIaFechada);
+  for (const coluna of FECHADAS_DE_HOJE[tabela]) {
+    expect.soft(doCatalogo, `${tabela}.${coluna} sumiu do catálogo ou deixou de ser fechada pela regra`).toContain(coluna);
+  }
+  return doCatalogo;
 }
 
 function leColuna(papel: string, tabela: string, coluna: string): boolean {
@@ -134,7 +155,7 @@ describe("9175 · a sessão não lê custo, tokens, provedor nem modelo de IA", 
     for (const tabela of TABELAS) {
       expect.soft(privilegio("authenticated", tabela, "SELECT"), `authenticated tem SELECT da tabela ${tabela}`).toBe(false);
       expect.soft(privilegio("anon", tabela, "SELECT"), `anon tem SELECT da tabela ${tabela}`).toBe(false);
-      for (const coluna of FECHADAS[tabela]) {
+      for (const coluna of fechadas(tabela)) {
         expect.soft(leColuna("authenticated", tabela, coluna), `authenticated lê ${tabela}.${coluna}`).toBe(false);
       }
       for (const coluna of ABERTAS[tabela]) {
@@ -157,7 +178,7 @@ describe("9175 · a sessão não lê custo, tokens, provedor nem modelo de IA", 
 
   it("o membro não lê custo, tokens, provedor nem modelo (42501), nem com select *", () => {
     for (const tabela of TABELAS) {
-      for (const coluna of FECHADAS[tabela]) {
+      for (const coluna of fechadas(tabela)) {
         expect
           .soft(erroComoMembro(`select ${coluna} from public.${tabela} where organization_id = '${ORG}';`), `${tabela}.${coluna}`)
           .toMatch(new RegExp(`permission denied for table ${tabela}`));
@@ -231,7 +252,7 @@ describe("9175 · a sessão não lê custo, tokens, provedor nem modelo de IA", 
     );
     const registro = JSON.parse(comoMembro(`select to_jsonb(r)::text from (select ${colunas} from public.ai_agent_runs where id = '${RUN}') r;`)) as Record<string, unknown>;
     expect(registro).toMatchObject({ id: RUN, status: "completed", agent_id: AGENTE, is_dry_run: false });
-    for (const coluna of FECHADAS.ai_agent_runs) expect(registro, coluna).not.toHaveProperty(coluna);
+    for (const coluna of fechadas("ai_agent_runs")) expect(registro, coluna).not.toHaveProperty(coluna);
   });
 
   it("coluna nova do upstream ganha SELECT na passada seguinte; a de tokens não", () => {
