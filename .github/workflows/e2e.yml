@@ -832,6 +832,55 @@ jobs:
     # NÃO MEDIDO: se as cinco passam na vizinhança nova. Cada uma limpa o que
     # grava, mas a ordem por caminho dentro da parte é outra. Se uma reprovar
     # por vizinhança, volte só aquela e meça de novo. Não mova outra no escuro.
+    #
+    # ── 2026-11-28: três specs mudam de parte, nenhuma parte nova (MIA-357) ──
+    #
+    # ESCOPO DA MEDIÇÃO: as 6 rodadas verdes do e2e na `main` de 23 a 27/11
+    # (45266235323, 45312771680, 45486878880, 45719464472, 45902943215 e
+    # 46072380802), 48 jobs. Duração por spec = soma dos intervalos entre as
+    # linhas do reporter `list` (o primeiro caso conta desde o "Running N
+    # tests"), mediana das 6. "Fixo" da parte = job − soma dos casos, das duas
+    # rodadas com as listas de hoje (45902943215 e 46072380802).
+    #
+    # Preparo × teste, medianas das partes comuns: o passo de teste leva de
+    # 470 a 1079 s, o preparo de 410 a 560 s, e dele ~314 s são o build. O teste
+    # é a maior parte, então o caminho é recortar as listas, não cache.
+    #
+    # Com as listas do MIA-229, a parte 2 é a mais lenta: 1539 e 1354 s de job
+    # (1016 e 931 s de suíte), com a 5 em 1108 e 965 s. O equilíbrio ideal das
+    # sete comuns é ~1236 s. A parte 3 tem piso de ~1252 s sem mover nada dela.
+    # Busca exaustiva de 1 a 3 movimentos, minimizando o pior caso, sem mexer
+    # em spec presa a ambiente (Resend da 2, ffmpeg da 6, causal da 8, jev-* da
+    # 5, `navegacao` da 7, a 4 inteira) nem nos instáveis conhecidos:
+    #
+    #   `cobranca-revendedor` (118 s)   PARTE_2 → PARTE_5 (dublê 3995: ver a
+    #       nota dela acima da PARTE_2).
+    #   `retomar-ao-devolver` (35 s)    PARTE_2 → PARTE_7. Não vai para a 1:
+    #       põe turno de follow-up na fila e a 1 tem o tick global do
+    #       `relogio-http-cron-externo`.
+    #   `sidebar-scroll-lock` (57 s)    PARTE_8 → PARTE_6. Não vai para a 1,
+    #       onde o menu da `navegacao` já reprovou por estado do banco.
+    #
+    #   parte │ médio antes │ médio depois │ pior antes │ pior depois
+    #     1   │    1199s    │    1199s     │   1311s    │   1311s
+    #     2   │    1418s    │    1265s     │   1592s    │   1432s
+    #     3   │    1252s    │    1252s     │   1356s    │   1356s
+    #     5   │    1119s    │    1236s     │   1291s    │   1414s
+    #     6   │    1153s    │    1210s     │   1259s    │   1316s
+    #     7   │    1199s    │    1234s     │   1298s    │   1335s
+    #     8   │    1310s    │    1253s     │   1357s    │   1300s
+    #
+    # "Médio" = fixo médio da parte + soma das medianas por spec; "pior" =
+    # maior fixo + soma dos máximos. São estimativas: quem mede é o e2e do PR.
+    #
+    # O fluxo inteiro (29 a 35 min; 72 em 26/11) não é só a parte mais lenta:
+    # em 4 das 6 rodadas a última parte a começar esperou de 7 a 40 min por
+    # runner (`started_at − created_at` do job), porque o `ci` e o `e2e`
+    # disputam o limite de jobs simultâneos da conta. Repartir não resolve a
+    # fila, e mais partes a pioram.
+    #
+    # NÃO MEDIDO: se as três passam na vizinhança nova. Se uma reprovar por
+    # vizinhança, volte só aquela e meça de novo.
     env:
       # Provider controlado; preview/assistência executam core, ferramentas e gates reais.
       INTERNAL_AGENT_RUN_STUB: "true"
@@ -966,6 +1015,10 @@ jobs:
       # (COBRANCA_API_BASE_URL_TESTE do .env.e2e) e devolve as chaves da
       # instalação como achou.
       # PREVISÃO, não medida: ~5 min de caso.
+      # Em 2026-11-28 (MIA-357) ela foi para a PARTE_5: medida em 118 s de
+      # mediana. Não vai para a 1 (`cobranca-asaas`), a 6
+      # (`cobranca-link-pelo-dono`) nem a 8 (Graph de anúncios): as três usam o
+      # mesmo dublê 127.0.0.1:3995. Ver o bloco de 2026-11-28 no topo do job.
       # `modelos-cabem-em-375` (#3702) é irmã de `celular-cabe-na-tela` e entra
       # pelo mesmo critério: o que ela mede é a REGRA (formulário de modelo ×
       # 375px), não um fluxo — um login, sem WAHA, sem Graph, sem seed próprio.
@@ -990,12 +1043,10 @@ jobs:
         central-de-avisos-capacidades.spec.ts
         escalacao-ciclo.spec.ts
         distribuicao-atendimento.spec.ts
-        cobranca-revendedor.spec.ts
         escopo-de-funil-do-agente.spec.ts
         publico-por-origem-do-agente.spec.ts
         followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts
-        retomar-ao-devolver.spec.ts
         etapa-avisa-na-central.spec.ts
         gatilho-de-caso.spec.ts
         conversa-do-caso.spec.ts
@@ -1448,6 +1499,7 @@ jobs:
         contadores-do-menu.spec.ts
         honorarios-instalar-e-pagar.spec.ts
         reenvio-pelo-celular.spec.ts
+        cobranca-revendedor.spec.ts
 
       # ─── PARTE 6 — nasceu em 2026-09-28, e o orçamento de 24 min a pediu ───
       #
@@ -1554,6 +1606,7 @@ jobs:
         atender-pelo-celular.spec.ts
         inbox-baixar-midia-e-ordem.spec.ts
         capacidades-do-agente.spec.ts
+        sidebar-scroll-lock.spec.ts
 
       # ─── PARTE 7 — nasceu em 2026-10-22, uma parte COMUM ───
       #
@@ -1636,6 +1689,7 @@ jobs:
         admin-consumo-de-ia-por-mes-e-por-agente.spec.ts
         blueprint-de-funis.spec.ts
         operacao-do-dia.spec.ts
+        retomar-ao-devolver.spec.ts
       # Ambiente isolado: esta spec exige HMAC WAHA e Graph sintético no
       # processo next start. As demais partes preservam a configuração WAHA.
       #
@@ -1661,7 +1715,6 @@ jobs:
       # O relógio publicado em cada run separa preparo, suíte e total da parte.
       # Toda admissão exige medir a composição; teto de caso não é duração medida.
       SPECS_PARTE_8: >-
-        sidebar-scroll-lock.spec.ts
         meta-lead-submitted-causal.spec.ts
         atendimento-conjunto.spec.ts
         autonomia-assistida.spec.ts
