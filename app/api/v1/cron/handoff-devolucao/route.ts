@@ -43,6 +43,7 @@ import {
   type ConversaEmHandoff,
 } from "@/lib/escalacao/devolucao-automatica";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { autorizaCron } from "@/lib/auth/cron-auth";
@@ -52,6 +53,30 @@ export const dynamic = "force-dynamic";
 
 /** Teto de conversas lidas por rodada; o que sobrar entra na próxima. */
 const SCAN_LIMIT = 500;
+
+/**
+ * FORK MIA (MIA-373) — quantas páginas de 1000 cada leitura de configuração
+ * (as empresas com prazo, os agentes publicados delas, os roteadores ativos
+ * delas) pode ocupar. Em 28/11/2026 a produção tinha 18 empresas, nenhuma com
+ * o prazo ligado, 11 agentes publicados e 2 roteadores ativos: 20 mil é folga
+ * larga. Passou disso, a rodada falha FECHADA (500, nada devolvido) em vez de
+ * tratar as primeiras como todas.
+ */
+const PAGINAS_DA_CONFIGURACAO = 20;
+
+/**
+ * FORK MIA (MIA-373) — leitura com erro ou cortada não vira lista: lança, e a
+ * rota responde 500 sem devolver nada. Tratar metade das empresas como todas
+ * deixaria a outra metade sem devolução, calada.
+ */
+function inteiraOuLanca<T>(
+  tabela: string,
+  leitura: { linhas: T[]; truncado: boolean; erro: string | null },
+): T[] {
+  if (leitura.erro) throw new Error(`${tabela}: ${leitura.erro}`);
+  if (leitura.truncado) throw new Error(`${tabela}: leitura cortada em ${leitura.linhas.length} linhas`);
+  return leitura.linhas;
+}
 
 /** Quem age é o produto, não uma pessoa — `emitLeadActivity` grava como sistema. */
 const ATOR_DO_CRON = { type: "webhook_source", id: "cron:handoff-devolucao" } as const;
@@ -69,13 +94,24 @@ export interface DevolucaoResultado {
  * já rejeita valor fora da faixa — um `->>` no PostgREST repetiria a regra.
  */
 async function prazosPorOrganizacao(admin: SupabaseClient): Promise<Map<string, number>> {
-  const { data, error } = await admin
-    .from("organizations")
-    .select("id, settings")
-    .not("settings->routing->handoff_return_after_minutes", "is", null);
-  if (error) throw new Error(`organizations: ${error.message}`);
+  // FORK MIA (MIA-373) — as empresas com prazo INTEIRAS, página a página, na
+  // ordem de `id`. Antes era uma leitura só, sem `range`: o PostgREST corta em
+  // 1000 linhas sem avisar, e a empresa fora da página nunca tinha devolução.
+  const empresas = inteiraOuLanca(
+    "organizations",
+    await lerTodasAsPaginas<{ id: string; settings: unknown }>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("organizations")
+          .select("id, settings", pedirContagem ? { count: "exact" } : undefined)
+          .not("settings->routing->handoff_return_after_minutes", "is", null)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_DA_CONFIGURACAO },
+    ),
+  );
   const prazos = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ id: string; settings: unknown }>) {
+  for (const row of empresas) {
     const minutos = lerPrazoDeDevolucaoMinutos(row.settings);
     if (minutos !== null) prazos.set(row.id, minutos);
   }
@@ -100,31 +136,54 @@ async function sessoesComAgente(
     out.set(org, s);
   };
 
-  const { data: agentes, error: erroAgentes } = await admin
-    .from("ai_agents")
-    .select("organization_id, published_version_id, ai_agent_versions!ai_agents_published_version_id_fkey(channel_session_id, status)")
-    .in("organization_id", orgIds)
-    .is("archived_at", null)
-    .not("published_version_id", "is", null);
-  if (erroAgentes) throw new Error(`ai_agents: ${erroAgentes.message}`);
   type Versao = { channel_session_id: string | null; status: string };
+  // FORK MIA (MIA-373) — os agentes publicados INTEIROS, paginados por `id`.
+  // Agente fora da página deixava a sessão dele "sem ninguém que atenda", e a
+  // conversa vencida ali nunca era devolvida.
+  const agentes = inteiraOuLanca(
+    "ai_agents",
+    await lerTodasAsPaginas<{
+      organization_id: string;
+      ai_agent_versions: Versao | Versao[] | null;
+    }>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("ai_agents")
+          .select(
+            "organization_id, published_version_id, ai_agent_versions!ai_agents_published_version_id_fkey(channel_session_id, status)",
+            pedirContagem ? { count: "exact" } : undefined,
+          )
+          .in("organization_id", orgIds)
+          .is("archived_at", null)
+          .not("published_version_id", "is", null)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_DA_CONFIGURACAO },
+    ),
+  );
   // O embed por FK many-to-one volta como OBJETO em runtime, mas os tipos
   // gerados o declaram como lista — o dispatcher normaliza do mesmo jeito.
-  for (const a of (agentes ?? []) as unknown as Array<{
-    organization_id: string;
-    ai_agent_versions: Versao | Versao[] | null;
-  }>) {
+  for (const a of agentes) {
     const v = Array.isArray(a.ai_agent_versions) ? (a.ai_agent_versions[0] ?? null) : a.ai_agent_versions;
     if (v && v.status === "published") add(a.organization_id, v.channel_session_id);
   }
 
-  const { data: roteadores, error: erroRoteadores } = await admin
-    .from("ai_routers")
-    .select("organization_id, channel_session_id")
-    .in("organization_id", orgIds)
-    .eq("is_active", true);
-  if (erroRoteadores) throw new Error(`ai_routers: ${erroRoteadores.message}`);
-  for (const r of (roteadores ?? []) as Array<{ organization_id: string; channel_session_id: string | null }>) {
+  // FORK MIA (MIA-373) — os roteadores ativos INTEIROS, paginados por `id`.
+  const roteadores = inteiraOuLanca(
+    "ai_routers",
+    await lerTodasAsPaginas<{ organization_id: string; channel_session_id: string | null }>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("ai_routers")
+          .select("organization_id, channel_session_id", pedirContagem ? { count: "exact" } : undefined)
+          .in("organization_id", orgIds)
+          .eq("is_active", true)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_DA_CONFIGURACAO },
+    ),
+  );
+  for (const r of roteadores) {
     add(r.organization_id, r.channel_session_id);
   }
   return out;

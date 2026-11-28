@@ -156,6 +156,12 @@ vi.mock("@/lib/supabase/admin", () => ({
         eq: registrar("eq"),
         or: () => chain,
         limit: () => resolver(),
+        // FORK MIA (MIA-373): as leituras de configuração paginam por `id`. A
+        // ordem é no-op aqui (cada caso tem poucas linhas, já na ordem), e o
+        // `range` corta como o PostgREST: a página depois da última vem vazia.
+        order: () => chain,
+        range: (de: number, ate: number) =>
+          resolver().then((r) => ({ ...r, data: (r.data as unknown[]).slice(de, ate + 1) })),
         then: (res: (v: unknown) => unknown) => resolver().then(res),
       };
       return chain;
