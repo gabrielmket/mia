@@ -320,6 +320,18 @@ ou um arquivo que confunda o leitor, para aqui, e não no deploy
 quando o `drop` perdeu (a regra antiga fica e o erro conta), e não cobre regra criada só dentro de
 função (por exemplo os módulos instalados por `fn_modulo_instalar`), que o deploy não roda.
 
+**O que o leitor do nível de cima não vê** (segunda leitura do Arquiteto, MIA-356). São três coisas:
+- o `drop` que fica dentro de `$$` ou de `execute`;
+- o `alter policy|trigger ... rename`;
+- a string `E'...'` com `\'` dentro e o comentário `/* */` aninhado.
+
+Nenhum desses casos atinge hoje uma regra que tenha `create` no nível de cima. O único `drop` em
+corpo de bloco com o mesmo nome de uma regra é o do `trg_organization_modules_touch`
+(`baseline-mia.sql:703`), e ele é em `mia_modulos_contratados`, não na `organization_modules` do
+`create` da `baseline.sql:89939`. **Quem escreve migration:** para apagar ou renomear de vez uma regra
+criada no nível de cima, use um `drop ... if exists` solto, no nível de cima, depois do `create`.
+Assim o leitor sabe que a regra foi apagada de vez e não a recria.
+
 **Para o Revisor.** Migration que COPIA dado e depois APAGA a origem em dois comandos soltos pode
 perder a cópia (disputa) e ganhar o apagar; a passada seguinte sai limpa e o dado não veio. Copiar e
 apagar vão no mesmo bloco `do $$ ... $$` (uma transação só). Vale também sem esta mudança. A mesma
