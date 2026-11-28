@@ -129,7 +129,12 @@ abertos:
 ## Como fazer uma sincronização
 
 ```bash
-# 1. Medir antes (o que o robô faz todo dia)
+# 1. Medir antes (o que o robô faz todo dia). Com node_modules, o relatório traz a
+#    seção "Assinaturas que mudaram": função ou tipo exportado do upstream que
+#    mudou de parâmetro, retorno ou campo na faixa, e o arquivo:linha nosso que o
+#    usa. É o erro que passa limpo no merge e só aparece no typecheck da CI.
+#    Ajuste quem usa antes do primeiro push. A mesma medição, por faixa:
+#    node scripts/assinaturas-do-upstream.mjs vA vB HEAD   (--json para a lista inteira)
 node scripts/sincronizar-upstream.mjs
 
 # 2. Fundir numa árvore separada — nunca direto na main que está em produção
