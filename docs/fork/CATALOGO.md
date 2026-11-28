@@ -1105,6 +1105,30 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 
 ---
 
+### 30. O agendador espalha as rotas dentro do minuto · [`agendador-espalhado.md`](agendador-espalhado.md)
+**O que faz.** Cada linha do crontab do agendador dorme um atraso fixo (0 a 45 s, tirado do `cksum` do caminho
+da rota) antes do `curl`, para as rotas deixarem de bater todas no segundo zero (MIA-341, dívida 6). O atraso
+nunca passa da folga entre o `-m` e a batida seguinte, porque o `crond` do busybox pula a linha que ainda roda.
+A frequência de nenhuma rota muda. **Migrations** nenhuma. **Mora em** `docker/scheduler/entrypoint.sh`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-341)`): do upstream, `docker/scheduler/entrypoint.sh` (um bloco no
+laço que escreve o crontab, antes do `printf`; o atraso vai no fim de `quando` e o `printf` segue o do upstream)
+e `tests/shell/scheduler-entrypoint.test.sh` (o dublê de `sleep`).
+
+**Protege.** `tests/unit/agendador-espalha-as-rotas.test.ts` (roda o entrypoint: toda linha com atraso, a
+mesma lista, frequência e `-m` da tabela `CRONS=`, o atraso do `cksum`, no máximo 4 rotas por segundo fora do
+zero, nenhum atraso acima da folga).
+
+**Conferir.**
+1. `git grep -n "FORK MIA (MIA-341)" docker/scheduler/entrypoint.sh tests/shell/scheduler-entrypoint.test.sh` (um em cada; se a fusão reescreveu o laço, o bloco tem de continuar antes do `printf`).
+2. Se o upstream mudou o formato da linha do `printf` (o `curl` deixou de vir logo depois do agendamento), confira que o `sleep` continua antes do `curl` no crontab gerado.
+3. `npx vitest run tests/unit/agendador-espalha-as-rotas.test.ts tests/unit/cron-routes-scheduled.test.ts` e `bash tests/shell/scheduler-entrypoint.test.sh`.
+
+**Riscos.** Seis rotas de minuto sem folga (`-m` 60 ou 240) seguem juntas no segundo zero; o documento lista
+quais e por quê. Rota nova que cair num segundo com 4 reprova o teste: muda-se o agendamento ou o `-m` dela.
+
+---
+
 ## Tabela final: por função, o documento, as migrations e os testes principais
 
 | # | função | documento | migrations | testes principais |
@@ -1138,6 +1162,7 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
 | 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts`, `mcp-do-crm-sem-modelo-ao-cliente.test.ts`, `prospeccao-sem-modelo-ao-cliente.test.ts`, `agente-publicado-segue-a-plataforma.test.ts` (unidade e invariante) |
 | 29 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
+| 30 | O agendador espalha as rotas no minuto | `agendador-espalhado.md` | nenhuma | `agendador-espalha-as-rotas.test.ts`, `tests/shell/scheduler-entrypoint.test.sh` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
