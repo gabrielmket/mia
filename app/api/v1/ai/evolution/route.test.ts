@@ -11,7 +11,12 @@ vi.mock('@/lib/ai/trava-da-ia-na-rota', () => ({
 
 const from = vi.fn();
 const rpc = vi.fn();
-vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ from, rpc }) }));
+// FORK MIA (MIA-251 G): `fn_uso_de_ia` soma custo, que a sessão não lê desde a
+// 9175. A soma vai pelo cliente admin (o `rpc` que os casos abaixo conferem); a
+// sessão continua com as outras leituras e não chama a função.
+const rpcDaSessao = vi.fn(async () => ({ data: null, error: { message: 'permission denied for table llm_calls' } }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ from, rpc: rpcDaSessao }) }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc }) }));
 
 /** Agregado zerado no formato de `fn_uso_de_ia` (`usoDeIaSchema`). */
 function agregado(custo: number | string = 0) {
@@ -288,11 +293,18 @@ describe('GET /api/v1/ai/evolution', () => {
       user: { idioma: 'pt-BR', is_platform_admin: false, support: null },
     });
     rpc.mockResolvedValue({ data: usoDoBanco('42.75'), error: null });
+    rpc.mockClear();
+    rpcDaSessao.mockClear();
     const r = await GET(req('?from=2026-07-01&to=2026-07-03'));
     const body = await r.json();
     expect(body.data.outcome.cost_cents).toBeNull();
     // O resto do painel continua inteiro: só o dinheiro sai.
     expect(body.data.outcome.messages_received).toBeDefined();
+    // FORK MIA (MIA-251 G): para o cliente o custo nem é somado, e a fonte não
+    // aparece como falha (a sessão receberia 42501 da função).
+    expect(rpc).not.toHaveBeenCalled();
+    expect(rpcDaSessao).not.toHaveBeenCalled();
+    expect(body.data.fontes_incompletas).not.toContainEqual(expect.objectContaining({ fonte: 'llm_calls' }));
   });
 
   it('a soma do custo que falha zera o card e entra em fontes_incompletas', async () => {

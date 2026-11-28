@@ -57,6 +57,9 @@ import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
+// FORK MIA (MIA-251 G): a sessão não lê custo, tokens, provedor nem modelo (9175).
+import { colunasDaSessao } from "@/lib/ai/colunas-de-ia-fechadas";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -292,9 +295,14 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   }
   const q = parsed.data;
 
-  let query = supabase
+  // FORK MIA (MIA-251 G): desde a 9175 a sessão não lê tokens nem custo. Quem vê
+  // (a plataforma) lê pelo cliente admin, depois do portão e com o filtro da
+  // organização logo abaixo; os outros, pela sessão, sem essas colunas.
+  const veIaDaPlataforma = podeVerCusto(await quemPedeNaRota(authz));
+  const leitor: typeof supabase = veIaDaPlataforma ? createAdminClient() : supabase;
+  let query = leitor
     .from("llm_calls")
-    .select(CALL_COLUMNS)
+    .select(veIaDaPlataforma ? CALL_COLUMNS : colunasDaSessao(CALL_COLUMNS))
     // `organization_id` explícito: pela sessão a RLS repete o filtro; pelo
     // token o cliente é a service role e este é o único.
     .eq("organization_id", organizationId)
@@ -336,7 +344,7 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   // Dinheiro é da plataforma nesta instalação (lib/ai/custo-e-da-plataforma.ts).
   // FORK MIA (MIA-262): tokens e o erro cru do provedor saem junto com o custo.
-  return ok(semIaDaPlataforma(slice, podeVerCusto(await quemPedeNaRota(authz))), {
+  return ok(semIaDaPlataforma(slice, veIaDaPlataforma), {
     requestId,
     meta: { cursor: nextCursor, has_more: hasMore },
   });

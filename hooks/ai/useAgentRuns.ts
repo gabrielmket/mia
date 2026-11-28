@@ -111,6 +111,8 @@ export function useAgentRuns(
   // nenhum. Consequência ao usuário: a tela promete acompanhamento ao vivo, e os
   // avisos abaixo NUNCA apareceram — quem abria para ver o agente trabalhando via
   // lista parada e concluía que nada estava acontecendo.
+  // FORK MIA (MIA-251 G): desde a 9175 a linha chega sem `tokens_in`, `tokens_out`
+  // e `cost_cents` (a sessão não lê essas colunas); o aviso só usa status e is_dry_run.
   useRealtimeChannel({
     name: agentId ? `ai-agent-runs-${agentId}` : "ai-agent-runs-disabled",
     postgresChanges: agentId

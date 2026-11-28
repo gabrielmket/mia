@@ -30,6 +30,9 @@ import {
 } from "@/lib/retencao/politica";
 import { createClient } from "@/lib/supabase/server";
 import { podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
+// FORK MIA (MIA-251 G): a sessão não lê custo, tokens, provedor nem modelo (9175).
+import { colunasDaSessao } from "@/lib/ai/colunas-de-ia-fechadas";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { diaIso, janelaDaLeitura } from "@/lib/retencao/janela-do-traco";
 import {
   COLUNAS_DO_TRACO,
@@ -139,10 +142,13 @@ async function responder(
   const falhaNaConsulta = () =>
     fail("query_failed", t("Erro interno. Tente de novo em instantes."), 500, { requestId });
   try {
-    const db = await obterDb();
+    // FORK MIA (MIA-251 G): desde a 9175 a sessão não lê provedor, modelo, tokens
+    // nem custo. Quem vê (a plataforma) lê pelo cliente admin, depois do portão e
+    // com o filtro da organização logo abaixo; os outros, pelo cliente do portão.
+    const db: SupabaseClient = veIaDaPlataforma ? createAdminClient() : await obterDb();
     let consulta = db
       .from("agent_turn_traces")
-      .select(COLUNAS_DO_TRACO)
+      .select(veIaDaPlataforma ? COLUNAS_DO_TRACO : colunasDaSessao(COLUNAS_DO_TRACO))
       // A organização vem da SESSÃO (o portão já a resolveu contra as memberships),
       // nunca de um filtro do pedido. A RLS da 0721 isola igual; isto é a segunda.
       .eq("organization_id", organizationId)

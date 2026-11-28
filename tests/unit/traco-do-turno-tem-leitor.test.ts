@@ -30,6 +30,8 @@ const { GET } = await import("@/app/api/v1/ai/turn-traces/route");
 const { COLUNAS_DO_TRACO, LIMITE_MAXIMO } =
   await import("@/lib/agent-engine/agent/recibo-do-traco");
 const { JANELA_PADRAO_DIAS, janelaDaLeitura } = await import("@/lib/retencao/janela-do-traco");
+// FORK MIA (MIA-251 G): a sessão pede o traço sem provedor, modelo, tokens e custo (9175).
+const { colunasDaSessao } = await import("@/lib/ai/colunas-de-ia-fechadas");
 
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const CONVERSA = "44444444-4444-4444-8444-444444444444";
@@ -94,7 +96,8 @@ describe("o leitor lê a organização da sessão", () => {
     expect(argsDe(chamadas, "from")).toEqual([["agent_turn_traces"]]);
     expect(argsDe(chamadas, "eq")).toContainEqual(["organization_id", ORG_ID]);
     // A query NÃO pede `select *`: a projeção é nominal (PII).
-    expect(argsDe(chamadas, "select")).toEqual([[COLUNAS_DO_TRACO]]);
+    // FORK MIA (MIA-251 G): pela sessão, sem as colunas de IA fechadas desde a 9175.
+    expect(argsDe(chamadas, "select")).toEqual([[colunasDaSessao(COLUNAS_DO_TRACO)]]);
   });
 
   it("sem sessão, a resposta do portão sobe inteira (não consulta o banco)", async () => {

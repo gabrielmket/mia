@@ -4,6 +4,8 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
+// FORK MIA (MIA-251 G): a sessão não lê tokens (9175); a contagem vai pelo admin.
+import { createAdminClient } from "@/lib/supabase/admin";
 import { BudgetCard } from "@/components/ai/BudgetCard";
 import { Card } from "@/components/ui/card";
 import { getBudgetStatus } from "@/lib/ai/budget/check";
@@ -30,7 +32,10 @@ function singleParam(v: string | string[] | undefined): string | undefined {
 /** Janela do aviso de contexto caro: os mesmos 30 dias que a tela mostra por padrão. */
 const JANELA_DO_AVISO_MS = 29 * 86_400_000;
 
-type SupabaseDaPagina = Awaited<ReturnType<typeof createClient>>;
+// FORK MIA (MIA-251 G): a contagem filtra `input_tokens`, que a sessão não lê
+// desde a 9175. A página só abre para a plataforma (`podeVerCusto`, abaixo), e a
+// contagem vai pelo cliente admin, filtrando a organização.
+type SupabaseDaPagina = ReturnType<typeof createAdminClient>;
 
 /**
  * Quantas chamadas de TURNO o agente fez no período — e, quando pedido, quantas
@@ -118,12 +123,13 @@ export default async function AiUsagePage({ searchParams }: PageProps) {
   const agora = new Date();
   const desdeIso = new Date(agora.getTime() - JANELA_DO_AVISO_MS).toISOString();
   const ateIso = agora.toISOString();
+  const admin = createAdminClient(); // FORK MIA (MIA-251 G): depois do portão
   const avisos = (
     await Promise.all(
       agents.map(async (agente) => {
         const [chamadas, acimaDoLimite] = await Promise.all([
-          contarTurnos(supabase, activeOrg.orgId, agente.id, desdeIso, ateIso, false),
-          contarTurnos(supabase, activeOrg.orgId, agente.id, desdeIso, ateIso, true),
+          contarTurnos(admin, activeOrg.orgId, agente.id, desdeIso, ateIso, false),
+          contarTurnos(admin, activeOrg.orgId, agente.id, desdeIso, ateIso, true),
         ]);
         const medida =
           chamadas === null || acimaDoLimite === null
