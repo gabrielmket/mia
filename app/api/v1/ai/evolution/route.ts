@@ -31,6 +31,8 @@ import {
 import { usoDeIaSchema } from "@/lib/ai/usage/aggregate";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
+// FORK MIA (MIA-251 G): a sessão não lê custo (9175); a soma vai pelo admin.
+import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 
@@ -162,6 +164,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const fromIso = range.from.toISOString();
   const toIso = endOfUtcDay(range.to).toISOString();
   const supabase = authz.supabase;
+  const veCusto = podeVerCusto(await quemPedeNaRota(authz)); // FORK MIA (MIA-251 G): calculado antes
 
   /**
    * Uma fonte fora do ar não pode apagar o painel inteiro: o bloco dela aparece
@@ -258,7 +261,12 @@ export async function GET(req: NextRequest): Promise<Response> {
    * Falhou: o card zera e a tela é avisada, como qualquer outra fonte.
    */
   async function custoDoPeriodo(): Promise<number> {
-    const { data, error } = await supabase.rpc("fn_uso_de_ia", {
+    // FORK MIA (MIA-251 G): `fn_uso_de_ia` soma `llm_calls.cost_cents`, que a
+    // sessão não lê desde a 9175. Quem não vê custo recebe o card nulo de todo
+    // jeito (`costCents`, abaixo): não soma, e a fonte não aparece como falha.
+    // Quem vê (a plataforma) soma pelo cliente admin, com `p_org` filtrando.
+    if (!veCusto) return 0;
+    const { data, error } = await createAdminClient().rpc("fn_uso_de_ia", {
       p_org: orgId,
       p_desde: fromIso,
       p_ate: toIso,
@@ -384,7 +392,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // Só a plataforma vê dinheiro (lib/ai/custo-e-da-plataforma.ts); para o
     // cliente o card de custo some, em vez de mostrar R$ 0,00, que seria falso.
     // FORK MIA: desde a v1.121 a rota aceita token, que nunca é da plataforma.
-    costCents: podeVerCusto(await quemPedeNaRota(authz)) ? costCents : null,
+    costCents: veCusto ? costCents : null,
     inboundCount,
     handoffCount: handoffInbox + handoffEvents,
     pipelines: [...porPipeline.entries()].map(([name, hints]) => ({ name, hints })),

@@ -17,6 +17,9 @@ import { fail, ok } from "@/lib/api/wrappers";
 // MIA: o custo em dinheiro é número da plataforma — sai da resposta para quem
 // não é admin de plataforma (ver `lib/ai/custo-e-da-plataforma.ts`).
 import { podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
+// FORK MIA (MIA-251 G): a sessão não lê custo, tokens, provedor nem modelo (9175).
+import { colunasDaSessao } from "@/lib/ai/colunas-de-ia-fechadas";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 import { CONFERENCIA_DE_CAMPO, PEDIDOS_DO_CLIENTE, rotuloDaChamadaDoJev } from "@/lib/ai/decisao/tarefas";
@@ -123,12 +126,15 @@ export async function GET(req: NextRequest): Promise<Response> {
   const veIaDaPlataforma = podeVerCusto(await quemPedeNaRota(authz));
   const provider = veIaDaPlataforma ? filtros.data.provider : undefined;
 
-  const db = authz.supabase;
+  const colunas =
+    "id, purpose, provider, model, status, error_code, error_message, http_status, origem_da_escolha, input_tokens, output_tokens, cost_cents, latency_ms, created_at";
+  // FORK MIA (MIA-251 G): desde a 9175 a sessão não lê custo, tokens, provedor nem
+  // modelo. Quem vê (a plataforma) lê pelo cliente admin, depois do portão e com o
+  // filtro da organização logo abaixo; os outros, pela sessão, sem essas colunas.
+  const db: typeof authz.supabase = veIaDaPlataforma ? createAdminClient() : authz.supabase;
   let q = db
     .from("llm_calls")
-    .select(
-      "id, purpose, provider, model, status, error_code, error_message, http_status, origem_da_escolha, input_tokens, output_tokens, cost_cents, latency_ms, created_at",
-    )
+    .select(veIaDaPlataforma ? colunas : colunasDaSessao(colunas))
     .eq("organization_id", authz.organizationId)
     .order("created_at", { ascending: false })
     .limit(limite);
@@ -138,9 +144,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   // "Só o Jev" inclui as linhas da reserva que o cobriu: são as que o cartão
   // conta em "Vezes que a IA de sempre cobriu o Jev", e o link do cartão traz
   // para cá. Filtrar só pelo provedor escondia justamente elas.
-  if (provider === PROVEDOR_DO_JEV) {
+  // FORK MIA (MIA-251 G): filtrar por provedor só no cliente admin (`veIaDaPlataforma`).
+  if (veIaDaPlataforma && provider === PROVEDOR_DO_JEV) {
     q = q.or(`provider.eq.${PROVEDOR_DO_JEV},origem_da_escolha.eq.reserva_do_jev`);
-  } else if (provider) {
+  } else if (veIaDaPlataforma && provider) {
     q = q.eq("provider", provider);
   }
 

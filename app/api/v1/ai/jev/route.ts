@@ -360,12 +360,16 @@ export async function GET(): Promise<Response> {
   const { org } = authz;
 
   const db = await createClient();
+  // FORK MIA (MIA-251 G): a semana do Jev lê provedor e custo de `llm_calls`, que a
+  // sessão não lê desde a 9175. O portão acima é da plataforma (`escolheIa`); a
+  // leitura vai pelo cliente admin, filtrando a organização.
+  const leitorDeCusto = createAdminClient();
 
   const lerSemana = async (): Promise<{ linhas: LinhaDaSemana[]; erro: string | null }> => {
     const linhas: LinhaDaSemana[] = [];
     const desde = diasAtras(DIAS_DOS_NUMEROS);
     for (let pagina = 0; pagina < PAGINAS_MAX; pagina++) {
-      const { data, error } = await db
+      const { data, error } = await leitorDeCusto
         .from("llm_calls")
         .select("purpose, provider, status, origem_da_escolha, error_code, cost_cents, latency_ms, created_at")
         .eq("organization_id", org.orgId)

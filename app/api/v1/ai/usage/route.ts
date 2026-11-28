@@ -15,6 +15,8 @@ import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
+// FORK MIA (MIA-251 G): a sessão não lê custo nem tokens (9175); a soma vai pelo admin.
+import { createAdminClient } from "@/lib/supabase/admin";
 import { montarPayloadDeUso, usoDeIaSchema } from "@/lib/ai/usage/aggregate";
 import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -99,7 +101,11 @@ export async function GET(req: NextRequest): Promise<Response> {
   const fromIso = range.from.toISOString();
   const toIso = endOfUtcDay(range.to).toISOString();
 
-  const supabase = authz.supabase;
+  // FORK MIA (MIA-251 G): `fn_uso_de_ia` (security invoker) soma custo e tokens
+  // de `llm_calls`, que a sessão não lê desde a 9175. O portão acima é da
+  // plataforma (`podeVerCusto`); a soma vai pelo cliente admin, e `p_org` passa
+  // a ser o filtro da organização, não mais a defesa em profundidade.
+  const supabase = createAdminClient();
 
   // A soma é feita NO BANCO (`fn_uso_de_ia`, migration 0586). Esta rota buscava
   // as linhas de `llm_calls` e somava aqui — e o PostgREST entrega no máximo
