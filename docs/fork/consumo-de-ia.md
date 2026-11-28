@@ -417,9 +417,7 @@ pelo PostgREST.
   workers pelo cliente admin (`lib/ai/usage/registrar-chamada.ts`, `lib/ai/log-invocation.ts`,
   `lib/ai/runtime/*`, `lib/ai/agents/teste-da-versao.ts`, `send-voice.ts`, `workers/media-derive-worker.ts`).
   As funções SQL que gravam nessas tabelas são `security definer`.
-- A **leitura** não mudou aqui. Fechar as colunas de custo, tokens, provedor e modelo para a sessão (passos 2,
-  4 e 5 do desenho da MIA-285) é outra subtarefa da MIA-251, depois da MIA-262. O lugar dela está marcado em
-  `fn_mia_colunas_de_ia_fechadas()`.
+- A **leitura** não mudou aqui: fechou na 9175 (seção 12).
 - `agent_turn_traces` já está fechada para escrita desde a 0721 do upstream e não é tocada.
 - O suporte em modo somente leitura segue travado no `tool_calls`. As `support_write_*` do upstream só ficam em
   tabela que `authenticated` grava inteira (`fn_aplicar_travas_de_suporte`, 0274): sem o update da tabela, a
@@ -452,3 +450,89 @@ Escritor novo do upstream em `llm_calls` ou `ai_agent_runs` vai pelo **cliente a
 papel**, filtrando `organization_id`, com a linha `FORK MIA`. Pela sessão ele daria 42501 em produção. A cerca
 acima acusa no PR da fusão. Se o upstream criar coluna que a anonimização precise redigir pela sessão em
 `ai_agent_runs`, ela entra no `grant update (...)` da função, por migration nova.
+
+## 12. A sessão não lê custo, tokens, provedor nem modelo (MIA-251 G, migration 9175)
+
+Depois da 9173 a sessão já não gravava o custo, mas ainda o lia: qualquer membro da empresa, pelo PostgREST,
+pedia `cost_cents`, os tokens, o provedor e o modelo de cada chamada. A resposta da API já tirava esses campos
+desde a MIA-262 (`semIaDaPlataforma`); a 9175 tira no banco também.
+
+### 12.1 A regra
+
+- Em `llm_calls`, `agent_turn_traces` e `ai_agent_runs`, `authenticated` não tem SELECT da tabela: tem SELECT
+  coluna por coluna, de todas menos as fechadas. `anon` não lê nada das três.
+- Fechadas: `cost_cents`, `provider`, `model`, `entrada_do_primeiro_passo` (tokens do 1º passo) e **toda coluna
+  com `tokens` no nome** (`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`,
+  `tokens_in`, `tokens_out`). A regra é uma só, em `lib/ai/colunas-de-ia-fechadas.ts` e na função do banco, e a
+  cerca confere que as duas batem.
+- Pedir coluna fechada pela sessão dá 42501 (`permission denied for table …`), e `select *` também. Filtrar ou
+  ordenar por ela também: o banco pede SELECT da coluna do WHERE e do ORDER BY. `count(*)` e as colunas
+  abertas (status, erro, tempo, ids, ferramentas) continuam.
+- A anonimização LGPD continua: o `update (tool_calls)` da 9173 fica, e o PostgREST grava com `RETURNING 1`,
+  filtrando por `id` e `organization_id`, que seguem abertos.
+- `fn_uso_de_ia` (do upstream, `security invoker`, EXECUTE para `authenticated`) soma custo e tokens: pela
+  sessão dá 42501. As outras invoker que leem custo (`fn_gasto_de_ia_do_mes`, `fn_previa_historico_analise`,
+  `fn_resumo_historico_analise`) já eram só do `service_role`.
+
+### 12.2 Quem lê o quê
+
+Quem precisa de coluna fechada é rota da plataforma (`podeVerCusto`): lê pelo **cliente admin, depois do
+portão**, filtrando `organization_id`. Quem não é da plataforma (o gerente da empresa, a plataforma em suporte,
+o token de integração) lê pela sessão com `colunasDaSessao(colunas)`, e `semIaDaPlataforma` continua trocando
+o que falta por `null` na resposta.
+
+| Leitor | Antes | Agora |
+|---|---|---|
+| `app/api/v1/ai/runs/route.ts` (Execuções) | sessão, todas as colunas, filtro por provedor | portão: admin com todas para a plataforma, sessão sem as fechadas para os outros; o filtro por provedor só no admin |
+| `app/api/v1/ai/agents/[id]/runs/route.ts` (aba Execuções do agente) | sessão, tokens e custo | o mesmo portão; o texto do teste (`ai_agent_runs`) segue pela sessão |
+| `app/api/v1/ai/turn-traces/route.ts` (traço do turno) | sessão, provedor, modelo, tokens e custo | o mesmo portão |
+| `app/app/ai/usage/page.tsx` (aviso de contexto caro) | sessão, filtro por `input_tokens` | admin (a página só abre para a plataforma) |
+| `app/api/v1/ai/jev/route.ts` (semana do Jev) | sessão, provedor e custo | admin (o portão é `escolheIa`, só da plataforma) |
+| `app/api/v1/ai/usage/route.ts` (`fn_uso_de_ia`) | sessão | admin (o portão é `podeVerCusto`) |
+| `app/api/v1/ai/evolution/route.ts` (`fn_uso_de_ia`) | sessão | admin para a plataforma; para os outros o custo nem é somado (o card já vinha nulo) |
+| `lib/mcp/tools/agentes.ts` (MCP do cliente) | já sem provedor e modelo (MIA-304) | igual |
+| `hooks/ai/useAgentRuns.ts` (Realtime) | a linha inteira | a linha sem `tokens_in`, `tokens_out` e `cost_cents` |
+
+### 12.3 O Realtime de `ai_agent_runs`
+
+Ficou na publicação, e a assinatura não cai. O Postgres Changes do Supabase (`realtime.apply_rls`) monta o
+registro só com as colunas em que o papel tem `has_column_privilege(…, 'SELECT')` e só responde 401 quando a
+chave primária fica sem SELECT. `id` segue aberto, então a linha chega, sem custo e sem tokens. O hook só usa
+`status` e `is_dry_run` para os avisos. Provado no invariante e no ensaio pelo mesmo critério (chave primária
+legível e o registro montado como o membro o lê); um servidor de Realtime de verdade não sobe no ensaio.
+
+### 12.4 Onde mora
+
+A mesma `fn_mia_colunas_de_ia_fechadas()` da 9173, refeita pela 9175 com o passo 2 e chamada no fim do
+`baseline-mia.sql`. A lista de colunas sai de `information_schema.columns` a cada chamada: coluna nova do
+upstream ganha SELECT na implantação seguinte, e só as fechadas ficam de fora. O `GRANT ALL` do corpo do
+baseline do upstream reabre a tabela a cada passada e a função fecha de novo, inclusive SELECT de outro
+concedente e de coluna fechada solta. Devolve quantas concessões sobraram (0 = fechado).
+
+### 12.5 Testes
+
+- `tests/unit/colunas-de-custo-fora-da-sessao.test.ts` (cerca): reprova `select` com coluna fechada ou `*`,
+  filtro ou ordem por coluna fechada, recurso embutido com coluna fechada e `.rpc("fn_uso_de_ia")` por cliente
+  que não é o admin provado. Aceita o portão (`veIa ? createAdminClient() : sessao` com
+  `select(veIa ? colunas : colunasDaSessao(colunas))`, filtro fechado só dentro de `if (veIa && …)`). Confere
+  que a regra das colunas é a mesma na 9175, que o `baseline-mia.sql` espelha a função e que o schema não
+  ganhou função invoker nova lendo custo. Três arquivos de leitura da plataforma recebem o cliente por tipo
+  genérico e estão liberados com o chamador escrito.
+- `tests/invariants/custo-de-ia-a-sessao-nao-le.test.ts`: com a sessão do admin da empresa, cada coluna
+  fechada das três tabelas dá 42501, `select *` e filtro também; status e erro respondem; a anonimização grava
+  na forma do PostgREST; `fn_uso_de_ia` dá 42501 pela sessão e soma pelo admin; o Realtime entrega a linha sem
+  as fechadas; coluna nova ganha SELECT e a de tokens não; o `GRANT ALL` reaberto fecha de novo.
+- `scripts/ensaio-de-banco.sh`: a conferência "leitura de IA (9175)" com um membro das demonstrações.
+- Três invariantes do upstream que medem a `fn_uso_de_ia` pela RLS de quem chama
+  (`uso-de-ia-agregado-no-banco`, `uso-de-ia-turno-e-regua-unica`, `execucoes-de-ia-leem-a-organizacao`)
+  devolvem o SELECT da tabela à sessão no banco descartável deles, com a linha `FORK MIA`: medem a função como
+  o upstream a desenhou.
+
+### 12.6 Na fusão
+
+**Leitor novo de custo pela sessão vai para o cliente admin depois do portão.** Rota do upstream que lê
+`cost_cents`, tokens, provedor ou modelo dessas três tabelas pela sessão (ou chama `fn_uso_de_ia`) responde
+500 em produção (42501). Se for tela da plataforma, troque o cliente pelo admin depois do portão, filtrando
+`organization_id`; se for tela do cliente, use `colunasDaSessao(...)`. Marque com `FORK MIA`. A cerca acima
+acusa no PR da fusão. Coluna nova do upstream com custo ou tokens sem `tokens` no nome entra na lista de
+`lib/ai/colunas-de-ia-fechadas.ts` e na função, por migration nova.
