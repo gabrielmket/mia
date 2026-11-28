@@ -17,12 +17,20 @@
 #          não diminuem;
 #        - 0 tabela mia_* sem RLS;
 #        - as demonstrações geradas pelo código NOVO reaplicam com saída 0.
+#   3b. roda o easypanel/bootstrap.sh DE VERDADE (modo update, env fictícia, sem OWNER_EMAIL)
+#      sob disputa provocada por uma sessão que segura lock em public.conversations
+#      (MIA-348): disputa curta cura na 2ª passada sem prender o app; disputa que não
+#      acaba vira erro no carimbo, e some na rodada seguinte.
+#   3c. o bootstrap de verdade com o `create` de uma política restritiva de
+#      public.conversations perdendo a disputa nas 3 passadas (o `drop` ganha): a
+#      conferência das regras a recria do arquivo, igual, e o carimbo fica com 0 (MIA-354).
 #
 # Uso:
 #   scripts/ensaio-de-banco.sh \
 #     --no-ar <pasta supabase/ da versão no ar> --demos-no-ar <pasta com demo-<segmento>.sql> \
 #     --novo  <pasta supabase/ da versão nova>  --demos-novo  <pasta com demo-<segmento>.sql> \
 #     [--resumo <arquivo.md>] [--imagem <imagem do Postgres>] [--dump <arquivo>]
+#     [--bootstrap <easypanel/bootstrap.sh>]   (padrão: o do repositório deste script)
 #
 # `--dump` é só para uso local: restaura um dump no lugar do banco vazio (auth, storage,
 # public e private). O padrão é SEM dump, e nada de produção entra no repositório.
@@ -35,6 +43,7 @@ SEGMENTOS="bancada construtora clinica-odonto industria academia"
 IMAGEM_PADRAO="supabase/postgres:17.6.1.084"
 
 NO_AR=""; NOVO=""; DEMOS_NO_AR=""; DEMOS_NOVO=""; RESUMO=""; IMAGEM="$IMAGEM_PADRAO"; DUMP=""
+BOOTSTRAP="$(cd "$(dirname "$0")/.." && pwd)/easypanel/bootstrap.sh"
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-ar) NO_AR="$2"; shift 2 ;;
@@ -44,6 +53,7 @@ while [ $# -gt 0 ]; do
     --resumo) RESUMO="$2"; shift 2 ;;
     --imagem) IMAGEM="$2"; shift 2 ;;
     --dump) DUMP="$2"; shift 2 ;;
+    --bootstrap) BOOTSTRAP="$2"; shift 2 ;;
     *) echo "argumento desconhecido: $1" >&2; exit 2 ;;
   esac
 done
@@ -54,6 +64,7 @@ done
 for d in "$NO_AR" "$NOVO"; do
   [ -s "$d/baseline.sql" ] && [ -s "$d/baseline-mia.sql" ] || { echo "faltam baseline.sql/baseline-mia.sql em $d" >&2; exit 2; }
 done
+[ -s "$BOOTSTRAP" ] || { echo "falta o easypanel/bootstrap.sh ($BOOTSTRAP)" >&2; exit 2; }
 for seg in $SEGMENTOS; do
   for d in "$DEMOS_NO_AR" "$DEMOS_NOVO"; do
     [ -s "$d/demo-$seg.sql" ] || { echo "falta $d/demo-$seg.sql" >&2; exit 2; }
@@ -106,6 +117,11 @@ for lado in no-ar novo; do
   sed -n '/^-- >>> ANTES DO BASELINE DO UPSTREAM/,/^-- <<< ANTES DO BASELINE DO UPSTREAM/p' "$origem/baseline-mia.sql" >"$LOGS/antes-$lado.sql"
   docker cp "$LOGS/antes-$lado.sql" "$C:/ensaio/$lado/antes-do-upstream.sql"
 done
+# A etapa 3b roda o bootstrap de verdade, que lê os dois arquivos dos caminhos fixos da imagem.
+docker exec "$C" mkdir -p /deskcomm
+docker cp "$BOOTSTRAP" "$C:/deskcomm/bootstrap.sh"
+docker cp "$NOVO/baseline.sql" "$C:/deskcomm/baseline.sql"
+docker cp "$NOVO/baseline-mia.sql" "$C:/deskcomm/baseline-mia.sql"
 for seg in $SEGMENTOS; do
   docker cp "$DEMOS_NO_AR/demo-$seg.sql" "$C:/ensaio/demos-no-ar/demo-$seg.sql"
   docker cp "$DEMOS_NOVO/demo-$seg.sql" "$C:/ensaio/demos-novo/demo-$seg.sql"
@@ -346,6 +362,186 @@ for seg in $SEGMENTOS; do
     conferir 0 "demonstração '$seg' (código novo) falhou ao reaplicar" "$(grep -iE 'ERROR|FATAL' "$LOGS/demo-novo-$seg.log" | head -2 | cut -c1-200 | tr '\n' ';')"
   fi
 done
+
+echo "== 3b. a versão nova pelo bootstrap de verdade, sob disputa (MIA-348)"
+# O easypanel/bootstrap.sh do PR, no modo update, dentro do contêiner do ensaio. Env
+# fictícia e sem OWNER_EMAIL: ele sai antes de qualquer chamada HTTP. Uma sessão
+# segura `access share` em public.conversations, o que basta para todo comando do
+# schema que pede lock exclusivo nela esperar. A disputa é provocada e o tempo dela
+# é escolhido: nada aqui depende de sorte.
+BOOT() {
+  docker exec \
+    -e NEXT_PUBLIC_SUPABASE_URL=https://ensaio.exemplo.invalid \
+    -e SUPABASE_SERVICE_ROLE_KEY=chave-ficticia-do-ensaio \
+    -e SUPABASE_DB_URL=postgresql://supabase_admin@127.0.0.1:5432/postgres \
+    -e NUVEMSHOP_OAUTH_ENCRYPTION_KEY=chave-ficticia-do-ensaio \
+    -e OWNER_EMAIL= -e OWNER_PASSWORD= -e CPF_ENCRYPTION_KEY= \
+    "$C" sh /deskcomm/bootstrap.sh
+}
+# segurar_lock <segundos> [tabela] [modo]: em segundo plano, com application_name para
+# achar e soltar. O padrão é `access share` em public.conversations (3b); a 3c segura
+# outra tabela.
+segurar_lock() {
+  local tabela="${2:-public.conversations}" modo="${3:-access share}"
+  docker exec -e PGAPPNAME=ensaio-trava "$C" psql -U supabase_admin -h 127.0.0.1 -d postgres -q \
+    -c "begin; lock table $tabela in $modo mode; select pg_sleep($1); commit;" >/dev/null 2>&1 &
+  TRAVA=$!
+  for _ in $(seq 1 50); do
+    [ "$(PSQL -tAc "select count(*) from pg_locks l join pg_stat_activity a on a.pid = l.pid where a.application_name = 'ensaio-trava' and l.relation = '$tabela'::regclass and l.granted" 2>/dev/null)" = 1 ] && return 0
+    sleep 0.2
+  done
+  return 1
+}
+soltar_lock() {
+  PSQL -tAc "select pg_terminate_backend(pid) from pg_stat_activity where application_name = 'ensaio-trava'" >/dev/null 2>&1
+  wait "$TRAVA" 2>/dev/null
+}
+# Uma linha só: migração|erros|aplicado_em (a amostra, de várias linhas, é lida à parte).
+CARIMBO_SQL="select migration_mais_nova || '|' || coalesce(erros_inesperados::text, '?') || '|' || extract(epoch from aplicado_em)::bigint from public.schema_baseline where id = 1"
+AMOSTRA_SQL="select coalesce(erros_amostra, '') from public.schema_baseline where id = 1"
+POLITICAS="select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'"
+POL_ETAPA3=$(PSQL -tAc "$POLITICAS" 2>&1)
+# Todas as regras de isolamento do public, com a definição inteira, numa impressão
+# digital: md5|quantas. A 3c compara com esta (pega a definição intermediária de uma
+# regra redefinida, ou a regra que o arquivo apaga e voltou).
+REGRAS_SQL="select md5(string_agg(r, E'\\n' order by r)) || '|' || count(*) from (
+  select 'p|' || c.relname || '|' || p.polname || '|' || p.polpermissive::text || '|' || p.polcmd::text || '|'
+         || array_to_string(p.polroles::regrole[], ',') || '|' || coalesce(pg_get_expr(p.polqual, p.polrelid), '') || '|'
+         || coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') as r
+    from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'
+  union all
+  select 't|' || c.relname || '|' || t.tgname || '|' || pg_get_triggerdef(t.oid)
+    from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and not t.tgisinternal
+) regras"
+REGRAS_ETAPA3=$(PSQL -tAc "$REGRAS_SQL" 2>&1)
+
+# Caso 1 e 2: disputa curta (8 s). A passada 1 sob disputa já leva mais que isso (cada
+# comando em conversations espera a espera curta), então o lock cai no meio da passada 1
+# e a 2ª sai limpa;
+# e uma sessão do "app" que lê conversations durante o lock com statement_timeout de
+# 2 s. Sem a espera curta, a leitura ficaria na fila atrás do lock exclusivo que o
+# schema pede, até os 8 s.
+ANTES_C1=$(PSQL -tAc "$CARIMBO_SQL" 2>&1)
+if segurar_lock 8; then
+  (
+    falhas=0; feitas=0
+    for _ in $(seq 1 14); do
+      feitas=$((feitas + 1))
+      PSQL -tA -c "set statement_timeout = '2s'" -c "select count(*) from public.conversations" </dev/null >/dev/null 2>&1 || falhas=$((falhas + 1))
+      sleep 0.5
+    done
+    echo "$feitas $falhas" >"$LOGS/sonda-do-app.txt"
+  ) &
+  SONDA=$!
+  BOOT >"$LOGS/bootstrap-caso1.log" 2>&1; RC1=$?
+  wait "$SONDA"; soltar_lock
+  DEPOIS_C1=$(PSQL -tAc "$CARIMBO_SQL" 2>&1)
+  POL_C1=$(PSQL -tAc "$POLITICAS" 2>&1)
+  IFS='|' read -r mig1 erros1 epoca1 <<<"$DEPOIS_C1"
+  epoca0="${ANTES_C1##*|}"
+  if [ "$RC1" = 0 ]; then conferir 1 "3b caso 1: o bootstrap sob disputa curta sai 0"
+  else conferir 0 "3b caso 1: o bootstrap sob disputa curta saiu $RC1" "$(tail -3 "$LOGS/bootstrap-caso1.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if grep -q "passada 2 de 3: sem erro" "$LOGS/bootstrap-caso1.log"; then conferir 1 "3b caso 1: a disputa curta cura na passada 2" "$(grep -c 'perderam a disputa' "$LOGS/bootstrap-caso1.log") passada(s) com disputa"
+  else conferir 0 "3b caso 1: a passada 2 não fechou limpa (ou nem houve disputa na 1ª)" "$(grep -E 'passada|espera curta' "$LOGS/bootstrap-caso1.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if [ "$erros1" = 0 ]; then conferir 1 "3b caso 1: erros_inesperados = 0"
+  else conferir 0 "3b caso 1: erros_inesperados = ${erros1:-?}" "$(printf '%s' "$DEPOIS_C1" | cut -c1-300)"; fi
+  if [ "$mig1" = "$CARIMBO_NOVO" ] && [ -n "$epoca1" ] && [ "$epoca1" -ge "${epoca0:-0}" ] 2>/dev/null && [ "$DEPOIS_C1" != "$ANTES_C1" ]; then conferir 1 "3b caso 1: carimbo novo" "$mig1"
+  else conferir 0 "3b caso 1: o carimbo não foi regravado" "antes: $ANTES_C1 · depois: $DEPOIS_C1"; fi
+  if [ "$POL_C1" = "$POL_ETAPA3" ]; then conferir 1 "3b caso 1: políticas do public iguais às da etapa 3" "$POL_C1"
+  else conferir 0 "3b caso 1: políticas do public mudaram" "etapa 3: $POL_ETAPA3 · depois: $POL_C1"; fi
+  read -r feitas falhas <"$LOGS/sonda-do-app.txt" 2>/dev/null
+  if [ "${feitas:-0}" -gt 0 ] && [ "${falhas:-1}" = 0 ]; then conferir 1 "3b caso 2: o app não fica na fila atrás do schema" "$feitas leitura(s) com statement_timeout de 2 s, todas responderam"
+  else conferir 0 "3b caso 2: leitura do app presa atrás do schema" "${falhas:-?} de ${feitas:-?} estouraram os 2 s"; fi
+else
+  soltar_lock
+  conferir 0 "3b casos 1 e 2: a sessão que segura o lock não pegou o lock"
+fi
+
+# Caso 3: disputa que não acaba. A sessão segura o lock até o bootstrap terminar
+# (e não por um tempo fixo: as 3 passadas, com as esperas de 10 s e 20 s, duram o
+# que a lista de comandos em conversations mandar). O app sobe (saída 0), o
+# carimbo fica com erros > 0 e `lock timeout` na amostra; solto o lock, a rodada
+# seguinte volta a 0. É a /health dizendo `em_dia: false` e depois `true`.
+if segurar_lock 900; then
+  BOOT >"$LOGS/bootstrap-caso3.log" 2>&1; RC3=$?
+  soltar_lock
+  DEPOIS_C3=$(PSQL -tAc "$CARIMBO_SQL" 2>&1)
+  AMOSTRA_C3=$(PSQL -tAc "$AMOSTRA_SQL" 2>&1)
+  IFS='|' read -r _ erros3 _ <<<"$DEPOIS_C3"
+  if [ "$RC3" = 0 ]; then conferir 1 "3b caso 3: sob disputa que não acaba, o bootstrap sai 0 (o app sobe)"
+  else conferir 0 "3b caso 3: o bootstrap saiu $RC3" "$(tail -3 "$LOGS/bootstrap-caso3.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if grep -q "passada 3 de 3: .* perderam a disputa, e acabaram as passadas" "$LOGS/bootstrap-caso3.log"; then conferir 1 "3b caso 3: três passadas, e para na 3ª"
+  else conferir 0 "3b caso 3: não foram as 3 passadas" "$(grep -E 'passada' "$LOGS/bootstrap-caso3.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if [ "${erros3:-0}" -gt 0 ] 2>/dev/null && printf '%s' "$AMOSTRA_C3" | grep -qi 'lock timeout'; then conferir 1 "3b caso 3: erros_inesperados > 0, com lock timeout na amostra" "$erros3 erro(s)"
+  else conferir 0 "3b caso 3: o carimbo não contou a disputa" "$DEPOIS_C3 · $(printf '%s' "$AMOSTRA_C3" | cut -c1-200 | tr '\n' ';')"; fi
+  BOOT >"$LOGS/bootstrap-caso3-depois.log" 2>&1; RC3B=$?
+  erros3b=$(PSQL -tAc "select erros_inesperados from public.schema_baseline where id = 1" 2>&1)
+  if [ "$RC3B" = 0 ] && [ "$erros3b" = 0 ]; then conferir 1 "3b caso 3: solto o lock, a rodada seguinte volta a 0"
+  else conferir 0 "3b caso 3: solto o lock, a rodada seguinte não voltou a 0" "saída $RC3B · erros ${erros3b:-?} · $(grep -iE 'ERROR' "$LOGS/bootstrap-caso3-depois.log" | head -2 | cut -c1-200 | tr '\n' ';')"; fi
+else
+  soltar_lock
+  conferir 0 "3b caso 3: a sessão que segura o lock não pegou o lock"
+fi
+
+echo "== 3c. a regra restritiva que o drop tirou e o create não devolveu volta do arquivo (MIA-354)"
+# O buraco que sobra da espera curta: na última passada, o `drop policy if exists`
+# ganha a disputa e o `create policy` perde, e a regra fica fora do banco. Uma
+# restritiva faltando AMPLIA o acesso. Apagar a regra à mão antes do bootstrap não
+# provaria nada: a passada a recria sozinha. Então a disputa é provocada só no
+# `create` dela: um gatilho de evento do ensaio (`ddl_command_start`, CREATE POLICY)
+# tenta um lock numa tabela que outra sessão segura, nas 3 primeiras vezes em que o
+# comando dela chega (contadas por uma sequência, que não volta no rollback). Nas 3
+# passadas o `drop` ganha e o `create` perde por lock timeout de verdade; a 4ª vez
+# é a da conferência das regras, que tem de trazê-la de volta. Nada depende de sorte.
+REGRA_3C=conversation_participant_read_is_not_control_update
+DEF_3C="select polpermissive::text || '|' || polcmd::text || '|' || array_to_string(polroles::regrole[], ',') || '|' || coalesce(pg_get_expr(polqual, polrelid), '') || '|' || coalesce(pg_get_expr(polwithcheck, polrelid), '') from pg_policy where polname = '$REGRA_3C' and polrelid = 'public.conversations'::regclass"
+DEF_ANTES_3C=$(PSQL -tAc "$DEF_3C" 2>&1)
+if [ "${DEF_ANTES_3C%%|*}" != false ]; then
+  conferir 0 "3c: a política restritiva $REGRA_3C não está em public.conversations" "o baseline.sql mudou? Troque REGRA_3C por outra restritiva de conversations criada fora de \`do \$\$\`. Lido: $(printf '%s' "$DEF_ANTES_3C" | cut -c1-200)"
+elif ! PSQL -v ON_ERROR_STOP=1 -q >"$LOGS/preparo-3c.log" 2>&1 <<SQL
+create schema ensaio_3c;
+create table ensaio_3c.trava (x int);
+create sequence ensaio_3c.vezes;
+create function ensaio_3c.perde() returns event_trigger language plpgsql as \$\$
+begin
+  if current_query() ~* 'create\s+policy\s+${REGRA_3C}\M' and nextval('ensaio_3c.vezes') <= 3 then
+    lock table ensaio_3c.trava in access share mode;
+  end if;
+end \$\$;
+create event trigger ensaio_3c_perde on ddl_command_start when tag in ('CREATE POLICY') execute function ensaio_3c.perde();
+SQL
+then
+  conferir 0 "3c: o preparo (gatilho de evento do ensaio) falhou" "$(grep -iE 'ERROR' "$LOGS/preparo-3c.log" | head -2 | cut -c1-200 | tr '\n' ';')"
+elif segurar_lock 900 ensaio_3c.trava "access exclusive"; then
+  BOOT >"$LOGS/bootstrap-3c.log" 2>&1; RC3C=$?
+  soltar_lock
+  VEZES_3C=$(PSQL -tAc "select last_value from ensaio_3c.vezes" 2>&1)
+  DEF_DEPOIS_3C=$(PSQL -tAc "$DEF_3C" 2>&1)
+  REGRAS_DEPOIS_3C=$(PSQL -tAc "$REGRAS_SQL" 2>&1)
+  DEPOIS_3C=$(PSQL -tAc "$CARIMBO_SQL" 2>&1)
+  IFS='|' read -r _ erros3c _ <<<"$DEPOIS_3C"
+  if [ "$RC3C" = 0 ]; then conferir 1 "3c: o bootstrap sai 0"
+  else conferir 0 "3c: o bootstrap saiu $RC3C" "$(tail -3 "$LOGS/bootstrap-3c.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if grep -q "passada 3 de 3: .* perderam a disputa, e acabaram as passadas" "$LOGS/bootstrap-3c.log" \
+     && grep -q "regras de isolamento: 1 fora do banco depois da última passada" "$LOGS/bootstrap-3c.log"; then
+    conferir 1 "3c: o create perdeu nas 3 passadas e a regra ficou fora do banco" "$VEZES_3C vez(es) o comando chegou"
+  else conferir 0 "3c: a disputa provocada não deixou a regra fora do banco" "$(grep -E 'passada|regras de isolamento' "$LOGS/bootstrap-3c.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if grep -q "política $REGRA_3C em public.conversations voltou ao banco" "$LOGS/bootstrap-3c.log" && [ "$VEZES_3C" = 4 ]; then
+    conferir 1 "3c: a conferência das regras recriou só ela, do arquivo"
+  else conferir 0 "3c: a regra não voltou pela conferência" "vezes: ${VEZES_3C:-?} · $(grep -E 'regras de isolamento' "$LOGS/bootstrap-3c.log" | cut -c1-300 | tr '\n' ';')"; fi
+  if [ "$DEF_DEPOIS_3C" = "$DEF_ANTES_3C" ]; then conferir 1 "3c: voltou restritiva e com a mesma definição (comando, papéis, using, with check)"
+  else conferir 0 "3c: a definição da regra mudou" "antes: $(printf '%s' "$DEF_ANTES_3C" | cut -c1-200) · depois: $(printf '%s' "$DEF_DEPOIS_3C" | cut -c1-200)"; fi
+  if [ "$REGRAS_DEPOIS_3C" = "$REGRAS_ETAPA3" ] && [ "${REGRAS_ETAPA3#*|}" -gt 0 ] 2>/dev/null; then
+    conferir 1 "3c: todas as políticas e gatilhos do public iguais aos da etapa 3, com a definição" "${REGRAS_ETAPA3#*|} regra(s)"
+  else conferir 0 "3c: as regras do public mudaram" "etapa 3: $(printf '%s' "$REGRAS_ETAPA3" | cut -c1-120) · depois: $(printf '%s' "$REGRAS_DEPOIS_3C" | cut -c1-120)"; fi
+  if [ "$erros3c" = 0 ]; then conferir 1 "3c: o carimbo ficou com 0 erros"
+  else conferir 0 "3c: erros_inesperados = ${erros3c:-?}" "$(PSQL -tAc "$AMOSTRA_SQL" 2>&1 | cut -c1-300 | tr '\n' ';')"; fi
+else
+  soltar_lock
+  conferir 0 "3c: a sessão que segura o lock não pegou o lock"
+fi
+PSQL -q -c "drop event trigger if exists ensaio_3c_perde" -c "drop schema if exists ensaio_3c cascade" >/dev/null 2>&1
 
 echo
 if [ "$FALHAS" = 0 ]; then echo "RESULTADO: ensaio verde (todas as conferências passaram)"; else echo "RESULTADO: ensaio VERMELHO ($FALHAS conferência(s) falharam)"; fi

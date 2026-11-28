@@ -179,7 +179,9 @@ describe("o carimbo conta os erros do baseline", () => {
     // `|| true` a engoliria em silêncio, deixando o contador eternamente zerado
     // (que é o valor que diz "está tudo bem").
     const bootstrap = fs.readFileSync(path.join(RAIZ, "easypanel/bootstrap.sh"), "utf8");
-    const aplica = bootstrap.indexOf('psql "$DB" -q -f "$BASELINE"');
+    // Desde a MIA-348 o modo update aplica por `aplicar_passada` (a passada que se
+    // repete na disputa), com o baseline.sql pela cópia com espera curta.
+    const aplica = bootstrap.indexOf('aplicar_arquivo "$ARQUIVO_DO_UPSTREAM"');
     const grava = bootstrap.indexOf("update public.schema_baseline");
     expect(aplica, "o passo que aplica o baseline sumiu do bootstrap").toBeGreaterThan(-1);
     expect(grava, "o bootstrap parou de gravar o contador de erros").toBeGreaterThan(-1);
@@ -188,7 +190,7 @@ describe("o carimbo conta os erros do baseline", () => {
     // O schema da MIA é aplicado DEPOIS do do upstream e ANTES do contador. Sem
     // ele o banco sobe como DeskcommCRM puro — e, como é o nosso arquivo que
     // carimba, a saúde ficaria presa num carimbo velho em vez de acusar a falta.
-    const aplicaMia = bootstrap.indexOf('psql "$DB" -q -f "$BASELINE_MIA"');
+    const aplicaMia = bootstrap.indexOf('aplicar_arquivo "$BASELINE_MIA"');
     expect(aplicaMia, "o bootstrap parou de aplicar o schema da MIA").toBeGreaterThan(-1);
     expect(aplicaMia, "o schema da MIA tem de vir depois do do upstream").toBeGreaterThan(aplica);
     expect(grava, "o contador tem de ver os erros dos DOIS arquivos").toBeGreaterThan(aplicaMia);

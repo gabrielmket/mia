@@ -10,7 +10,7 @@
  * `revoke` de `authenticated`, gatilho que grava `updated_at`) e toda revogação
  * de módulo quebra. Esse passo mora no próprio `baseline-mia.sql`, entre
  * `-- >>> ANTES DO BASELINE DO UPSTREAM` e `-- <<< ANTES DO BASELINE DO UPSTREAM`,
- * e o `easypanel/bootstrap.sh` (as duas passadas do modo update) e o
+ * e o `easypanel/bootstrap.sh` (cada passada do modo update) e o
  * `scripts/ensaio-de-banco.sh` o recortam com `sed` e o aplicam primeiro.
  *
  * Nada disso dá erro quando quebra. Se um marcador some ou muda de texto, o
@@ -23,9 +23,11 @@
  * O que se exige:
  *   1. no `baseline-mia.sql`, um par de marcadores, na ordem, com SQL entre eles;
  *   2. os dois scripts recortam com o MESMO texto dos marcadores do arquivo;
- *   3. no `bootstrap.sh`, toda aplicação do `baseline.sql` no modo update (as
- *      duas passadas) vem logo depois de `antes_do_upstream`, e a função recorta
- *      do `$BASELINE_MIA` e manda para o `psql`;
+ *   3. no `bootstrap.sh`, toda aplicação do `baseline.sql` no modo update vem
+ *      logo depois de `antes_do_upstream`, e a função recorta do `$BASELINE_MIA`
+ *      e manda para o `psql`. Desde a MIA-348 a passada é uma só no texto
+ *      (`aplicar_passada`, repetida até 3 vezes num laço) e o `baseline.sql` vai
+ *      por `aplicar_arquivo "$ARQUIVO_DO_UPSTREAM"` (a cópia com espera curta);
  *   4. no `ensaio-de-banco.sh`, toda aplicação do `baseline.sql` em banco que já
  *      existe vem logo depois do `antes-do-upstream.sql` do mesmo lado.
  *
@@ -87,7 +89,9 @@ function problemasDoTrecho(sql: string): string[] {
 /**
  * Problemas do `bootstrap.sh` (vazio = ok): a função existe e recorta do
  * `$BASELINE_MIA` para o `psql`, e toda aplicação do `baseline.sql` sem
- * `ON_ERROR_STOP` (modo update) vem logo depois de `antes_do_upstream`.
+ * `ON_ERROR_STOP` (modo update) vem logo depois de `antes_do_upstream`. A
+ * aplicação é o `psql "$DB" ... -f "$BASELINE"` direto ou, desde a MIA-348,
+ * `aplicar_arquivo "$ARQUIVO_DO_UPSTREAM"` (a cópia com espera curta por lock).
  */
 function problemasDoBootstrap(sh: string): string[] {
   const problemas: string[] = [];
@@ -101,10 +105,14 @@ function problemasDoBootstrap(sh: string): string[] {
   }
   const uteis = linhasUteis(sh);
   const passadas = uteis.filter(
-    ({ linha }) => /psql\s+"\$DB".*-f\s+"\$BASELINE"(\s|$)/.test(linha) && !linha.includes("ON_ERROR_STOP"),
+    ({ linha }) =>
+      (/psql\s+"\$DB".*-f\s+"\$BASELINE"(\s|$)/.test(linha) && !linha.includes("ON_ERROR_STOP")) ||
+      /^aplicar_arquivo\s+"\$ARQUIVO_DO_UPSTREAM"(\s|$)/.test(linha),
   );
-  if (passadas.length !== 2)
-    problemas.push(`esperava 2 passadas do baseline.sql no modo update, achei ${passadas.length} (a cerca precisa de revisão)`);
+  if (passadas.length === 0)
+    problemas.push("não achei a aplicação do baseline.sql no modo update (a cerca precisa de revisão)");
+  if (!/^\s*ARQUIVO_DO_UPSTREAM="\$BASELINE"$/m.test(sh))
+    problemas.push('ARQUIVO_DO_UPSTREAM não parte mais do "$BASELINE"');
   for (const p of passadas) {
     const anterior = uteis[uteis.indexOf(p) - 1];
     if (anterior?.linha !== "antes_do_upstream")
@@ -155,7 +163,7 @@ describe("o trecho 'antes do upstream' da 9163 continua no lugar e rodando prime
     expect(trecho).toMatch(/^do \$\$[\s\S]*^end \$\$;$/m);
   });
 
-  it("o bootstrap.sh chama antes_do_upstream antes do baseline.sql nas duas passadas", () => {
+  it("o bootstrap.sh chama antes_do_upstream antes do baseline.sql em toda passada", () => {
     expect(problemasDoBootstrap(BOOTSTRAP)).toEqual([]);
   });
 
@@ -176,7 +184,7 @@ describe("a cerca morde (cópias estragadas de propósito)", () => {
   it("reprova o bootstrap sem a chamada em uma das passadas, ou com a chamada depois", () => {
     const linhas = BOOTSTRAP.split("\n");
     const chamadas = linhas.flatMap((l, i) => (l.trim() === "antes_do_upstream" ? [i] : []));
-    expect(chamadas.length).toBe(2);
+    expect(chamadas.length).toBeGreaterThan(0);
     for (const i of chamadas) {
       const sem = linhas.filter((_, j) => j !== i).join("\n");
       expect(problemasDoBootstrap(sem)).not.toEqual([]);

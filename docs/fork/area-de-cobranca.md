@@ -175,22 +175,203 @@ pagamento e o passo do pagamento já vieram da primeira frente. Detalhe em
 | `tests/unit/cadastro-sem-pagamento-apagar.test.ts` | a ordem do apagar, as recusas e a verificação em duas etapas na rota |
 | `tests/unit/mcp-de-implantacao-area-de-cobranca.test.ts` | as cobranças com a nota no `plataforma_ver_cliente`, 99 ferramentas |
 | `tests/unit/bootstrap-reaplica-no-deadlock.test.ts` | o conserto do bootstrap (seção 8) |
+| `tests/unit/bootstrap-confere-regras.test.ts` | a regra de isolamento que ficou fora do banco volta do arquivo, ou conta no carimbo (seção 8.1) |
+| `tests/unit/baseline-do-upstream-zera-o-lock-timeout.test.ts` | a cerca do cabeçalho do `baseline.sql` que o bootstrap troca na cópia (seção 8) |
 | `tests/invariants/area-de-cobranca.test.ts` | o banco: a 9125 só do servidor, o CHECK do final, a LGPD; o funil; o preparo do apagar e as recusas dele |
 
-## 8. O bootstrap reaplica o schema quando só sobra disputa
+## 8. O bootstrap reaplica o schema quando perde a disputa
 
 A implantação reaplica o schema (`easypanel/bootstrap.sh`, modo update) com o app ANTIGO ainda
-atendendo, e um `drop trigger if exists` ou um `create policy` esbarra num lock dele e perde por
-`deadlock detected`. Aconteceu em três implantações e deixou a saúde com `erros: 1` à toa (o comando
-que perdeu ficava de fora até o deploy seguinte).
+atendendo. Um `drop trigger if exists` ou um `create policy` pede lock exclusivo, entra na fila atrás
+de uma transação do app, forma ciclo e perde por `deadlock detected`. Aconteceu em três implantações
+e deixou a saúde com `erros: 1` à toa (o comando que perdeu ficava de fora até o deploy seguinte).
+Na .96 entrou uma segunda passada quando TODOS os erros eram deadlock; uma disputa que se repetisse
+nela ainda parava o trem. Desde a MIA-350 (desenho na MIA-348, dívida 5), no modo update:
 
-Agora, quando TODOS os erros inesperados da passada são `deadlock detected`, o bootstrap aplica o
-`baseline.sql` e o `baseline-mia.sql` mais UMA vez e conta os erros pela segunda passada (o que fica
-no banco e na saúde). O schema é idempotente, então reaplicar é o que todo deploy já faz. Erro de
-outra natureza não repete (repetir daria o mesmo erro, mais tarde), e a disputa que persiste na
-segunda passada é contada. O log da primeira passada fica em `/tmp/baseline-passada-1.log`. É a
-mesma regra que o kit do upstream já tem para a VPS (`reaplicar_baseline`, em
-`hostgator-setup-kit/_common.sh`), em versão de uma passada a mais.
+1. **Espera curta por lock.** Cada comando do schema desiste do lock em
+   `least(500ms, deadlock_timeout / 2)`, lido do próprio banco na hora (`AVISO` e 500 ms se a
+   leitura falhar). Desiste antes do `deadlock_timeout` do app, então quem perde é o schema (que
+   repete), e não a tela de alguém; e nenhuma consulta do app fica na fila atrás do lock exclusivo
+   por mais que isso. O `baseline-mia.sql` e o trecho "antes do upstream" recebem
+   `-c "set lock_timeout = ..."`.
+2. **O `baseline.sql` vai por uma cópia.** Ele abre com `SET lock_timeout = 0;` (linha 5), que
+   apagaria o `-c`. O bootstrap aplica `/tmp/deskcomm/baseline.sql`, com só essa linha trocada (o
+   resto byte a byte, a mesma contagem de linhas, o mesmo número de linha no erro). O
+   `supabase/baseline.sql` do repositório não muda. Se a linha não estiver nas 20 primeiras, o
+   bootstrap avisa e aplica o original; a cerca `baseline-do-upstream-zera-o-lock-timeout` reprova
+   a fusão antes disso acontecer calado.
+3. **Até 3 passadas inteiras**, esperando 10 s e depois 20 s, quando há ALGUM erro de disputa ou de
+   conexão (`deadlock detected`, `lock timeout`, conexão que caiu: o padrão do `reaplicar_baseline`
+   do kit do upstream, em `hostgator-setup-kit/_common.sh`). Com erro de verdade junto, repetir
+   limpa a disputa e sobra só o que precisa de conserto. Erro sem disputa nenhuma não repete.
+4. **O `psql` que não chega ao fim do arquivo conta.** Código de saída diferente de 0 vira a linha
+   "a aplicação não chegou ao fim do arquivo (o psql saiu com código N): <causa>". Antes, o
+   `|| true` engolia e o carimbo podia dizer 0 com metade do arquivo aplicada.
+5. **O carimbo é o da última passada**, que é o que ficou no banco: disputa curada na passada 2 ou
+   3 não conta; a que dura as 3 conta (`erros > 0`, `em_dia: false`, trem parado no passo 11), e
+   é o certo, porque o comando está fora do banco. A amostra começa pelo que NÃO é disputa. A escrita
+   do carimbo fica fora da espera curta.
+6. **Log:** uma linha por passada (`passada 2 de 3: 4 comando(s) perderam a disputa ...`) e
+   `/tmp/baseline-passada-N.log`; o da última também fica em `/tmp/baseline.log`.
+
+Banco novo não muda: sem app, sem espera curta e com `ON_ERROR_STOP`.
+
+**O que isto não resolve.** O kit do upstream para o que fala com o banco antes do DDL; daqui não
+dá (o bootstrap é um contêiner sem acesso ao Docker). Um comando numa tabela segurada por um cron
+longo (até 240 s no `prospecting`) ainda pode perder nas 3 passadas: conta como erro e o trem para,
+como antes, só que mais raro. Fica na dívida a coluna `passadas` no carimbo (para ver o deploy que
+precisou de 2 ou 3).
+
+O schema tem `drop ... if exists` e `create ...` em comandos soltos (regras e gatilhos), e alguns
+são de regra **restritiva** (as de `update`/`delete` em `conversations` e `messages`, as de
+`calendar_appointments`). Se o `drop` ganha o lock e o `create` logo depois perde por `lock timeout`,
+a regra ou o gatilho fica fora até a passada seguinte (10 a 30 s). Regra restritiva faltando amplia
+acesso; regra permissiva faltando nega; gatilho faltando pula a regra dele. Antes desta mudança o
+buraco era o mesmo, só que só no deadlock (raro); com a espera curta, perder vira o caso comum. Não
+dá para corrigir no arquivo: os pares estão no `baseline.sql`, que é do upstream byte a byte. Por
+isso existe a conferência abaixo.
+
+### 8.1 A conferência das regras de isolamento (MIA-354)
+
+Depois da última passada, o bootstrap recria do próprio arquivo a política ou o gatilho que ficou
+fora do banco.
+
+**O que devia existir.** Toda regra criada no nível de cima dos dois arquivos passa por um `create`
+em cada passada. Se ele rodou na última, a regra está no banco. Só pode faltar aquela cujo `create`
+a última passada mandou e o banco recusou, e esse é um erro contado. Os outros casos já viram erro:
+o `do $$ ... $$` é uma transação só (o `drop` e o `create` de dentro dele voltam juntos), e o `psql`
+que caiu no meio conta (item 4).
+
+**A última palavra do arquivo sobre a regra** (parecer do Arquiteto, MIA-356). O `create` que
+perdeu nem sempre é o que deixa a regra como o arquivo quer:
+- **redefinição:** 29 regras têm mais de um `create` no nível de cima (o
+  `trg_ai_agent_versions_content_immutable` tem 6). Recriar um `create` do meio deixaria a
+  definição intermediária no banco, com o contador em 0;
+- **apagada de vez:** a `crm_empresas_escrita` é criada no `baseline-mia.sql` e apagada de vez pelo
+  `drop` da `:10416`. Recriá-la seria ressuscitar uma regra que o arquivo tira.
+
+Por isso a conferência lê, nos três trechos da passada e na ordem dela (o "antes do upstream", o
+`baseline.sql` e o `baseline-mia.sql`), os `drop` e `create` de política e gatilho do **nível de
+cima** (`mencoes_das_regras`). O que está dentro de `$$`, de aspas ou de comentário não roda na
+passada e fica fora: por exemplo, os três `create policy email_cadences_select` do `baseline.sql`
+moram no corpo de `fn_cadencias_provisionar` e só rodam quando a função é chamada. O corte é o
+mesmo do `psql` (`$tag$`, aspas simples e duplas, `--` e `/* */`), e a linha de cada comando é a do
+`;`, que é a que o `psql` cita no erro. Por regra:
+- **o último `create` dela não perdeu:** a definição final rodou. Nada é recriado e o erro fica,
+  como antes desta conferência;
+- **o último `create` perdeu:** só ele pode voltar. Os `create` anteriores que perderam seguem o
+  resultado dele (voltou: os erros saem; não voltou: uma linha só de "fora do banco");
+- **depois dele vem um `drop`:** a regra é apagada de vez. Nada é recriado. O catálogo confirma que
+  ela está fora e o erro sai, com uma linha no log. Se ela estiver no banco (o `drop` final também
+  perdeu), o erro fica.
+
+**Por que não a lista do kit do upstream** (`hostgator-setup-kit/update.sh`, um `awk` que lê
+`create policy X on public.T` numa linha só e recorta até o primeiro `;` de fim de linha). Aqui ela
+erra calada:
+- 53 `create policy` do `baseline.sql` têm o nome sozinho na linha e o `on` na de baixo, entre eles
+  os quatro restritivos de `conversations` e `messages` (`:61599`, `:61604`, `:61613`, `:61628`);
+- 84 dos 364 estão dentro de `execute format(...)` ou de corpo de função;
+- um `-- comentário;` dentro da regra corta o comando;
+- o kit não confere gatilhos.
+
+**Como funciona.**
+1. **O `psql` recorta o comando.** As passadas rodam com `psql -b` (`--echo-errors`). Logo depois de
+   cada erro, ele escreve `psql:<arquivo>:<linha>: STATEMENT:  <o comando inteiro>`, exatamente
+   como leu do arquivo e mandou ao banco. Os blocos `STATEMENT` vão para
+   `/tmp/baseline-comandos-N.log` e saem do log da passada: o texto de um comando tem "error" em
+   nome de coluna, e a contagem continua a mesma. O stdout do `psql` (resultado de `select`) vai
+   antes do stderr no log da passada, para a causa de uma queda continuar sendo a última linha do
+   stderr.
+2. **O erro e o comando se acham pelo prefixo** `psql:<arquivo>:<linha>:`, que é o mesmo nas duas
+   linhas. Entram na conferência os erros contados cujo comando começa por `create policy` ou por
+   `create [or replace] [constraint] trigger`.
+3. **O catálogo diz se a regra está no banco.** O nome e a tabela saem do cabeçalho do comando (as
+   linhas juntas). O leitor reconhece os 848 cabeçalhos dos dois arquivos de hoje. Pergunta:
+   `pg_policy` por `polname` e `polrelid = to_regclass(tabela)`; `pg_trigger` sem os internos.
+   Os valores vão por variável do `psql`.
+4. **A regra que está no banco** (o `drop` também perdeu e ficou a definição antiga) não é tocada, e
+   o erro fica.
+5. **A regra que falta** roda sozinha, com `ON_ERROR_STOP`, a espera curta e o mesmo `search_path`
+   que vigorava no arquivo naquele ponto (o `baseline.sql` fixa `public, extensions` na `:6291`;
+   antes disso, e no `baseline-mia.sql` sem `set`, roda sem nada). Se perder a disputa de
+   novo, tenta outra vez, até `TENTATIVAS` rodadas com as mesmas esperas das passadas. Depois, o
+   catálogo é lido de novo:
+   - **voltou:** o erro sai da contagem (o comando rodou, como a disputa curada na passada 2);
+   - **não voltou:** o erro vira `regra de isolamento fora do banco: política X em public.T (o create
+     de <arquivo>:<linha>: perdeu e não voltou: <erro>)`, entra no começo da amostra e mantém
+     `erros > 0`. A `/health` dá `em_dia: false` e o trem para no passo 11. A ação é reimplantar
+     assim que a disputa passar, e não esperar o próximo trem.
+6. **Nunca some calado.** Cabeçalho que não dá para ler, comando que não está entre os do nível de
+   cima do arquivo, arquivo que o leitor não fechou (acabou dentro de aspas ou de `$$`) e catálogo
+   que não responde deixam o erro como está, com um `AVISO` no log. Nada é recriado às cegas.
+7. **Log:** `regras de isolamento: N fora do banco depois da última passada; recriando só essas`,
+   uma linha por regra (`... voltou ao banco` ou `AVISO: ... continua FORA do banco (<erro>)`) e os
+   arquivos em `/tmp/regras/`.
+
+**Cerca.** O bloco `STATEMENT` termina na próxima linha que começa com `psql:`. Por isso nenhuma
+linha dos dois baselines pode começar assim. E o leitor do nível de cima, rodando nos dois arquivos
+de verdade: fecha os três trechos; a única regra apagada de vez é a `crm_empresas_escrita`; os
+quatro restritivos de `conversations` e `messages` são `create` do nível de cima, com o
+`search_path` da `:6291`; o `email_cadences_select` não é. Uma regra nova criada e apagada de vez,
+ou um arquivo que confunda o leitor, para aqui, e não no deploy
+(`tests/unit/bootstrap-confere-regras.test.ts`).
+
+**Fora desta peça.** Não reaplica um `do $$ ... $$` que falhou, não reaplica o par `drop`/`create`
+quando o `drop` perdeu (a regra antiga fica e o erro conta), e não cobre regra criada só dentro de
+função (por exemplo os módulos instalados por `fn_modulo_instalar`), que o deploy não roda.
+
+**O que o leitor do nível de cima não vê** (segunda leitura do Arquiteto, MIA-356). São três coisas:
+- o `drop` que fica dentro de `$$` ou de `execute`;
+- o `alter policy|trigger ... rename`;
+- a string `E'...'` com `\'` dentro e o comentário `/* */` aninhado.
+
+Nenhum desses casos atinge hoje uma regra que tenha `create` no nível de cima. O único `drop` em
+corpo de bloco com o mesmo nome de uma regra é o do `trg_organization_modules_touch`
+(`baseline-mia.sql:703`), e ele é em `mia_modulos_contratados`, não na `organization_modules` do
+`create` da `baseline.sql:89939`. **Quem escreve migration:** para apagar ou renomear de vez uma regra
+criada no nível de cima, use um `drop ... if exists` solto, no nível de cima, depois do `create`.
+Assim o leitor sabe que a regra foi apagada de vez e não a recria.
+
+**Para o Revisor.** Migration que COPIA dado e depois APAGA a origem em dois comandos soltos pode
+perder a cópia (disputa) e ganhar o apagar; a passada seguinte sai limpa e o dado não veio. Copiar e
+apagar vão no mesmo bloco `do $$ ... $$` (uma transação só). Vale também sem esta mudança. A mesma
+regra vale para o nosso `baseline-mia.sql`: um `drop` + `create` de regra restritiva vai dentro de um
+`do $$ ... $$`, como já faz o par de `supabase/baseline-mia.sql:24052-24055`.
+
+**Provas.** `tests/unit/bootstrap-reaplica-no-deadlock.test.ts` (o bootstrap de verdade com um `psql`
+de mentira: lock timeout que cura na 2ª, disputa nas 3, disputa com permissão, benignos, `psql` que
+sai com código 2, a espera curta nas chamadas e a cópia com só a linha 5 trocada);
+`tests/unit/baseline-do-upstream-zera-o-lock-timeout.test.ts` (a cerca do cabeçalho); e a etapa 3b
+do `scripts/ensaio-de-banco.sh`, que roda o bootstrap de verdade num Postgres descartável com uma
+sessão segurando lock em `public.conversations`: disputa de 8 s cura na passada 2 (carimbo novo,
+`erros = 0`, as mesmas políticas da etapa 3) sem prender uma leitura do app com `statement_timeout`
+de 2 s; disputa que não acaba sai 0 com `erros > 0` e `lock timeout` na amostra, e solto o lock a
+rodada seguinte volta a 0.
+
+A conferência das regras (8.1):
+- `tests/unit/bootstrap-confere-regras.test.ts`, com o mesmo `psql` de mentira, cobre:
+  - nada falta;
+  - o erro que sobrou não é de regra;
+  - falta uma restritiva e volta (com o cabeçalho em duas linhas e o comando recriado byte a byte);
+  - falta e não volta, nas 3 rodadas, no começo da amostra;
+  - não volta por erro que não é disputa (uma tentativa);
+  - está no banco e não é tocada;
+  - o catálogo não responde;
+  - um gatilho;
+  - a regra volta e um erro de verdade fica;
+  - redefinição: dois `create` da mesma regra perderam, e só o último roda (volta e não volta);
+  - só o `create` antigo perdeu e o final rodou: nada é recriado;
+  - apagada de vez: nada é recriado, e o erro sai (ou fica, se ela está no banco);
+  - o `create` do erro está dentro de `$$`: `AVISO`, e o erro fica.
+- A etapa 3c do `scripts/ensaio-de-banco.sh` roda o bootstrap de verdade. Um gatilho de evento do
+  ensaio (`ddl_command_start`, CREATE POLICY) faz o `create` de
+  `conversation_participant_read_is_not_control_update` (restritiva, `conversations`) perder a
+  disputa por lock timeout de verdade nas 3 passadas, enquanto o `drop` ganha. Ele tenta um lock
+  numa tabela que outra sessão segura, nas 3 primeiras vezes, contadas por uma sequência. A etapa
+  confere que a regra ficou fora, voltou pela conferência na 4ª vez, restritiva e com a mesma
+  definição, que todas as políticas e gatilhos do `public` ficaram iguais aos da etapa 3, com a
+  definição inteira, e que o carimbo ficou com 0. Apagar a regra à mão antes do bootstrap não provaria
+  nada, porque a passada a recria sozinha.
 
 ## 9. Desvios do protótipo e lacunas
 
