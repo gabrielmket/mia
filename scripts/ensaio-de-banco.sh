@@ -481,7 +481,7 @@ echo "== 3c. a regra restritiva que o drop tirou e o create não devolveu volta 
 # passadas o `drop` ganha e o `create` perde por lock timeout de verdade; a 4ª vez
 # é a da conferência das regras, que tem de trazê-la de volta. Nada depende de sorte.
 REGRA_3C=conversation_participant_read_is_not_control_update
-DEF_3C="select polpermissive::text || '|' || polcmd || '|' || array_to_string(polroles::regrole[], ',') || '|' || coalesce(pg_get_expr(polqual, polrelid), '') || '|' || coalesce(pg_get_expr(polwithcheck, polrelid), '') from pg_policy where polname = '$REGRA_3C' and polrelid = 'public.conversations'::regclass"
+DEF_3C="select polpermissive::text || '|' || polcmd::text || '|' || array_to_string(polroles::regrole[], ',') || '|' || coalesce(pg_get_expr(polqual, polrelid), '') || '|' || coalesce(pg_get_expr(polwithcheck, polrelid), '') from pg_policy where polname = '$REGRA_3C' and polrelid = 'public.conversations'::regclass"
 DEF_ANTES_3C=$(PSQL -tAc "$DEF_3C" 2>&1)
 if [ "${DEF_ANTES_3C%%|*}" != false ]; then
   conferir 0 "3c: a política restritiva $REGRA_3C não está em public.conversations" "o baseline.sql mudou? Troque REGRA_3C por outra restritiva de conversations criada fora de \`do \$\$\`. Lido: $(printf '%s' "$DEF_ANTES_3C" | cut -c1-200)"
