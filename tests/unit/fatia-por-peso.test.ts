@@ -23,9 +23,9 @@ import {
   embaralhar,
   fatiaPorPeso,
   pesoDoArquivo,
-} from "../db/fatia-por-peso";
-import pesosMedidos from "../db/peso-dos-invariantes.json";
-import SequenciadorDosInvariantes from "../db/sequenciador-dos-invariantes";
+  SequenciadorDosInvariantes,
+} from "../../vitest.fatias";
+import pesosMedidos from "../../vitest.fatias.pesos.json";
 
 const RAIZ = path.resolve(__dirname, "../..");
 const PESOS = pesosMedidos.segundos as Record<string, number>;
@@ -96,7 +96,7 @@ describe("o sequenciador da suíte de banco", () => {
 
   it("vitest.db.config.ts usa o sequenciador (sem ele o corte volta ao hash)", () => {
     const config = readFileSync(path.join(RAIZ, "vitest.db.config.ts"), "utf8");
-    expect(config).toMatch(/import SequenciadorDosInvariantes from "\.\/tests\/db\/sequenciador-dos-invariantes"/);
+    expect(config).toMatch(/import \{ SequenciadorDosInvariantes \} from "\.\/vitest\.fatias"/);
     expect(config).toMatch(/sequence: \{ sequencer: SequenciadorDosInvariantes \}/);
   });
 

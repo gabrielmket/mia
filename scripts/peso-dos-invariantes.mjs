@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Refaz tests/db/peso-dos-invariantes.json a partir dos logs do `invariants-majors`
-// (MIA-346). A tabela só decide o EQUILÍBRIO entre as fatias (tests/db/fatia-por-peso.ts),
+// Refaz vitest.fatias.pesos.json a partir dos logs do `invariants-majors`
+// (MIA-346). A tabela só decide o EQUILÍBRIO entre as fatias (vitest.fatias.ts),
 // nunca quais arquivos rodam: refaça quando uma fatia passar a levar bem mais que as
 // outras, ou quando um invariante pesado novo entrar.
 //
@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const LIMIAR = 5;
-const DESTINO = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "tests/db/peso-dos-invariantes.json");
+const DESTINO = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "vitest.fatias.pesos.json");
 const ANSI = /\x1b\[[0-9;]*m/g;
 const LINHA = /[✓❯↓×] (tests\/invariants\/\S+\.test\.ts) \(\d+ tests?[^)]*\)\s*(\d+)ms/;
 
@@ -55,7 +55,7 @@ const tabela = {
   _leia:
     `Segundos medidos por arquivo de tests/invariants: mediana de ${logs.length} log(s) do ci.yml, ` +
     `refeita em ${new Date().toISOString().slice(0, 10)}. Só os de ${LIMIAR} s ou mais; os outros pesam ` +
-    "PESO_PADRAO. Quem lê: tests/db/fatia-por-peso.ts. Para refazer: scripts/peso-dos-invariantes.mjs.",
+    "PESO_PADRAO. Quem lê: vitest.fatias.ts. Para refazer: scripts/peso-dos-invariantes.mjs.",
   segundos,
 };
 writeFileSync(DESTINO, `${JSON.stringify(tabela, null, 2)}\n`);

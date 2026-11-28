@@ -1,5 +1,5 @@
 {
-  "_leia": "Segundos medidos por arquivo de tests/invariants: mediana de 33 log(s) do ci.yml (as fatias pg15 e pg17 das rodadas verdes 46072380825, 46073349725, 46081631755, 46085893845, 46087399094, 46088667019 e 46093377220), refeita em 2026-11-28. Só os de 5 s ou mais; os outros pesam PESO_PADRAO. Quem lê: tests/db/fatia-por-peso.ts. Para refazer: scripts/peso-dos-invariantes.mjs.",
+  "_leia": "Segundos medidos por arquivo de tests/invariants: mediana de 33 log(s) do ci.yml (as fatias pg15 e pg17 das rodadas verdes 46072380825, 46073349725, 46081631755, 46085893845, 46087399094, 46088667019 e 46093377220), refeita em 2026-11-28. Só os de 5 s ou mais; os outros pesam PESO_PADRAO. Quem lê: vitest.fatias.ts. Para refazer: scripts/peso-dos-invariantes.mjs.",
   "segundos": {
     "tests/invariants/adr-0002-d8-varreduras-com-os-modulos-instalados.test.ts": 20,
     "tests/invariants/agenda-atual-no-fechamento.test.ts": 7,

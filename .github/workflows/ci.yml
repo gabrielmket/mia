@@ -782,7 +782,7 @@ jobs:
     # 0,1 a 0,4 — e o vitest 12 a 27 min. O peso é teste, não schema. A fatia 1
     # levava sempre o dobro da mais leve porque o corte do vitest é por hash do
     # caminho e 6 arquivos somam 24% do tempo; o sequenciador da suíte
-    # (tests/db/fatia-por-peso.ts) passou a cortar por tempo medido, e a simulação
+    # (vitest.fatias.ts) passou a cortar por tempo medido, e a simulação
     # sobre os tempos do log dá ~13 min de vitest em cada uma das quatro.
     # RUNNERS PRÓPRIOS (VPS `deskcomm-vps`, aprovados pelo dono em 12/11/2026).
     # Por quê: a fila do Actions (teto de jobs simultâneos) segura esta matriz,

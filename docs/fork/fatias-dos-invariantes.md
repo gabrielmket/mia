@@ -26,14 +26,17 @@ caminho e corta em pedaços com o mesmo número de arquivos, e 6 arquivos somam 
 pesado leva ~165 s; a mediana é ~1 s). A fatia que recebia os pesados era sempre o caminho crítico:
 com 3 fatias, a 1 levava 18 a 27 min e a mais leve 12 a 17.
 
-Agora quem corta é o sequenciador da suíte (`tests/db/sequenciador-dos-invariantes.ts`, ligado em
-`vitest.db.config.ts`): maior peso primeiro, cada arquivo vai para a fatia mais leve até ali. A
+Agora quem corta é o sequenciador da suíte (`vitest.fatias.ts`, ligado em `vitest.db.config.ts`): maior peso primeiro, cada arquivo vai para a fatia mais leve até ali. A
 divisão é determinística, então cada fatia a calcula sozinha e as quatro somam a suíte inteira. A
 ordem dentro da fatia continua sorteada (issue #207), com a semente no log como antes.
 
+O sequenciador e a tabela moram na raiz, e não em `tests/`: `vitest.db.config.ts` os importa e entra
+na imagem, onde `tests/` não entra (`.dockerignore`). Em `tests/` o `next build` quebraria (TS2307);
+quem guarda é `tests/unit/pr-mexe-na-imagem.test.ts`.
+
 ## 3. A tabela de pesos
 
-`tests/db/peso-dos-invariantes.json`: segundos medidos por arquivo (mediana), só os de 5 s ou mais.
+`vitest.fatias.pesos.json`: segundos medidos por arquivo (mediana), só os de 5 s ou mais.
 Arquivo fora da tabela (novo, ou leve) pesa 1,2 s. Mais 0,6 s fixos por arquivo (o banco copiado do
 molde e o import).
 

@@ -1108,9 +1108,9 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 ### 30. As fatias dos invariantes de banco na CI · [`fatias-dos-invariantes.md`](fatias-dos-invariantes.md)
 **O que faz.** O `invariants-majors` do `ci.yml` roda a suíte de banco em 4 fatias por major, cortadas por
 tempo medido de cada arquivo (e não pelo hash do caminho do vitest), para nenhuma fatia virar o caminho
-crítico. **Migrations** nenhuma. **Mora em** `tests/db/fatia-por-peso.ts`,
-`tests/db/sequenciador-dos-invariantes.ts`, `tests/db/peso-dos-invariantes.json` e
-`scripts/peso-dos-invariantes.mjs`.
+crítico. **Migrations** nenhuma. **Mora em** `vitest.fatias.ts` (a divisão e o
+sequenciador), `vitest.fatias.pesos.json` e `scripts/peso-dos-invariantes.mjs`. Ficam na raiz, e não em
+`tests/`, porque `vitest.db.config.ts` os importa e entra na imagem (`tests/` fica fora pelo `.dockerignore`).
 
 **Pontos de encaixe** (do upstream): `vitest.db.config.ts` (`sequence: { sequencer: ... }`) e o job
 `invariants-majors` do `.github/workflows/ci.yml` (`fatia: [1, 2, 3, 4]` e `--shard=${{ matrix.fatia }}/4`).

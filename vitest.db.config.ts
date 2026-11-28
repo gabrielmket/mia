@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
-import SequenciadorDosInvariantes from "./tests/db/sequenciador-dos-invariantes";
+import { SequenciadorDosInvariantes } from "./vitest.fatias";
 
 // Config dedicada da suíte de invariantes de banco (tests/invariants/**).
 // Roda SÓ via `pnpm test:db` (scripts/test-db.sh), que sobe o Postgres efêmero
@@ -31,7 +31,7 @@ export default defineConfig({
     // As fatias do `invariants-majors` (`--shard=N/4` no ci.yml) são cortadas por
     // PESO medido, não pelo hash do caminho: com o hash, a fatia que recebia os
     // arquivos pesados levava o dobro das outras (MIA-346). A ordem dentro da
-    // fatia continua sorteada. Razão e medidas em tests/db/fatia-por-peso.ts.
+    // fatia continua sorteada. Razão e medidas em vitest.fatias.ts.
     sequence: { sequencer: SequenciadorDosInvariantes },
     // webhooks-trigger-events.test.ts chama os handlers REST diretamente (não
     // só SQL cru), e eles importam lib/env transitivamente (via lib/audit) —

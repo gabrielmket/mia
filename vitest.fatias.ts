@@ -21,11 +21,23 @@
  * fatias são disjuntas e somam todos os arquivos — quem guarda é
  * tests/unit/fatia-por-peso.test.ts.
  *
- * O peso vem de `peso-dos-invariantes.json` (segundos medidos, só os arquivos de
+ * O peso vem de `vitest.fatias.pesos.json` (segundos medidos, só os arquivos de
  * 5 s ou mais). Arquivo fora da tabela (novo, ou leve) pesa `PESO_PADRAO`. Tabela
  * velha só piora o EQUILÍBRIO, nunca a cobertura: todo arquivo cai em alguma fatia.
  * Para refazer a tabela: scripts/peso-dos-invariantes.mjs.
+ *
+ * ## Por que mora na raiz
+ *
+ * vitest.db.config.ts importa o sequenciador daqui, e o `next build` da imagem
+ * typecheca todo arquivo .ts do contexto, onde `tests/` não entra (.dockerignore).
+ * Em tests/ o import derrubaria a imagem (TS2307), como no #1190; quem guarda é
+ * tests/unit/pr-mexe-na-imagem.test.ts. Mesmo motivo de vitest.cercas.ts.
  */
+import path from "node:path";
+
+import { BaseSequencer, type TestSpecification } from "vitest/node";
+
+import pesosMedidos from "./vitest.fatias.pesos.json";
 
 /** Segundos de um arquivo leve (média medida dos arquivos abaixo de 5 s: 1,2 s). */
 export const PESO_PADRAO = 1.2;
@@ -90,4 +102,39 @@ export function embaralhar<T>(lista: T[], semente: number): T[] {
     ++s;
   }
   return lista;
+}
+
+const PESOS: Pesos = pesosMedidos.segundos;
+
+function caminhoDoRepositorio(raiz: string, spec: TestSpecification): string {
+  return path.relative(raiz, spec.moduleId).split(path.sep).join("/");
+}
+
+/**
+ * Sequenciador da suíte de invariantes (vitest.db.config.ts).
+ *
+ * Troca SÓ o corte do `--shard`: em vez do hash do caminho, `fatiaPorPeso`. A
+ * ordem dentro da fatia continua sorteada, como era (issue #207: o veredito não
+ * pode depender da ordem dos arquivos).
+ *
+ * Por que o sorteio mora aqui: com um sequenciador próprio na config, o vitest não
+ * troca mais para o `RandomSequencer` dele quando recebe
+ * `--sequence.shuffle.files=true` (scripts/test-db.sh), nem escolhe semente. Então
+ * a semente é a de `--sequence.seed`, se veio, ou o relógio, e sai no log com a
+ * mesma frase que o vitest escrevia.
+ */
+export class SequenciadorDosInvariantes extends BaseSequencer {
+  override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
+    const { root, shard } = this.ctx.config;
+    if (!shard) return files;
+    const porCaminho = new Map(files.map((spec) => [caminhoDoRepositorio(root, spec), spec]));
+    const escolhidos = fatiaPorPeso([...porCaminho.keys()], shard.index, shard.count, PESOS);
+    return escolhidos.map((caminho) => porCaminho.get(caminho) as TestSpecification);
+  }
+
+  override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
+    const semente = this.ctx.config.sequence.seed ?? Date.now();
+    this.ctx.logger.log(`      Running tests with seed "${semente}"`);
+    return embaralhar([...files], semente);
+  }
 }
