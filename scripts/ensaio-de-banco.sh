@@ -401,6 +401,20 @@ CARIMBO_SQL="select migration_mais_nova || '|' || coalesce(erros_inesperados::te
 AMOSTRA_SQL="select coalesce(erros_amostra, '') from public.schema_baseline where id = 1"
 POLITICAS="select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'"
 POL_ETAPA3=$(PSQL -tAc "$POLITICAS" 2>&1)
+# Todas as regras de isolamento do public, com a definição inteira, numa impressão
+# digital: md5|quantas. A 3c compara com esta (pega a definição intermediária de uma
+# regra redefinida, ou a regra que o arquivo apaga e voltou).
+REGRAS_SQL="select md5(string_agg(r, E'\\n' order by r)) || '|' || count(*) from (
+  select 'p|' || c.relname || '|' || p.polname || '|' || p.polpermissive::text || '|' || p.polcmd::text || '|'
+         || array_to_string(p.polroles::regrole[], ',') || '|' || coalesce(pg_get_expr(p.polqual, p.polrelid), '') || '|'
+         || coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') as r
+    from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'
+  union all
+  select 't|' || c.relname || '|' || t.tgname || '|' || pg_get_triggerdef(t.oid)
+    from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and not t.tgisinternal
+) regras"
+REGRAS_ETAPA3=$(PSQL -tAc "$REGRAS_SQL" 2>&1)
 
 # Caso 1 e 2: disputa curta (8 s). A passada 1 sob disputa já leva mais que isso (cada
 # comando em conversations espera a espera curta), então o lock cai no meio da passada 1
@@ -504,6 +518,7 @@ elif segurar_lock 900 ensaio_3c.trava "access exclusive"; then
   soltar_lock
   VEZES_3C=$(PSQL -tAc "select last_value from ensaio_3c.vezes" 2>&1)
   DEF_DEPOIS_3C=$(PSQL -tAc "$DEF_3C" 2>&1)
+  REGRAS_DEPOIS_3C=$(PSQL -tAc "$REGRAS_SQL" 2>&1)
   DEPOIS_3C=$(PSQL -tAc "$CARIMBO_SQL" 2>&1)
   IFS='|' read -r _ erros3c _ <<<"$DEPOIS_3C"
   if [ "$RC3C" = 0 ]; then conferir 1 "3c: o bootstrap sai 0"
@@ -517,6 +532,9 @@ elif segurar_lock 900 ensaio_3c.trava "access exclusive"; then
   else conferir 0 "3c: a regra não voltou pela conferência" "vezes: ${VEZES_3C:-?} · $(grep -E 'regras de isolamento' "$LOGS/bootstrap-3c.log" | cut -c1-300 | tr '\n' ';')"; fi
   if [ "$DEF_DEPOIS_3C" = "$DEF_ANTES_3C" ]; then conferir 1 "3c: voltou restritiva e com a mesma definição (comando, papéis, using, with check)"
   else conferir 0 "3c: a definição da regra mudou" "antes: $(printf '%s' "$DEF_ANTES_3C" | cut -c1-200) · depois: $(printf '%s' "$DEF_DEPOIS_3C" | cut -c1-200)"; fi
+  if [ "$REGRAS_DEPOIS_3C" = "$REGRAS_ETAPA3" ] && [ "${REGRAS_ETAPA3#*|}" -gt 0 ] 2>/dev/null; then
+    conferir 1 "3c: todas as políticas e gatilhos do public iguais aos da etapa 3, com a definição" "${REGRAS_ETAPA3#*|} regra(s)"
+  else conferir 0 "3c: as regras do public mudaram" "etapa 3: $(printf '%s' "$REGRAS_ETAPA3" | cut -c1-120) · depois: $(printf '%s' "$REGRAS_DEPOIS_3C" | cut -c1-120)"; fi
   if [ "$erros3c" = 0 ]; then conferir 1 "3c: o carimbo ficou com 0 erros"
   else conferir 0 "3c: erros_inesperados = ${erros3c:-?}" "$(PSQL -tAc "$AMOSTRA_SQL" 2>&1 | cut -c1-300 | tr '\n' ';')"; fi
 else

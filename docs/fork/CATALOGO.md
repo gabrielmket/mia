@@ -264,7 +264,7 @@ pagamento). **Mora em** `lib/area-de-cobranca/`, `components/area-de-cobranca/`,
 `app/admin/(protected)/empresas-do-cadastro/page.tsx` (funil, coluna e botão),
 `components/pagamento-inicial/CamposFiscais.tsx` (prop `documentoTravado`),
 `lib/mcp-plataforma/ferramentas/plataforma.ts` (`cobrancas` no `plataforma_ver_cliente`),
-`easypanel/bootstrap.sh` (aplica o schema com espera curta por lock e repete a passada inteira, até 3 vezes, quando algum comando perde a disputa; MIA-348; depois da última passada, recria do próprio arquivo a política ou o gatilho que ficou fora do banco, e o que não voltar conta em `schema.erros`; MIA-354), `lib/assistente/manuais-das-telas.ts`.
+`easypanel/bootstrap.sh` (aplica o schema com espera curta por lock e repete a passada inteira, até 3 vezes, quando algum comando perde a disputa; MIA-348; depois da última passada, recria do próprio arquivo a política ou o gatilho que ficou fora do banco, só quando aquele `create` é a última palavra do arquivo sobre a regra, e o que não voltar conta em `schema.erros`; MIA-354), `lib/assistente/manuais-das-telas.ts`.
 
 **Protege.** `tests/unit/area-de-cobranca-regras.test.ts`, `area-de-cobranca-leitura.test.ts`,
 `area-de-cobranca-servico.test.ts`, `area-de-cobranca-cartao-fora-dos-registros.test.ts`,

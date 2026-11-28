@@ -180,76 +180,177 @@ aplicar_passada() {
 # e `calendar_appointments` no baseline.sql); uma permissiva faltando esvazia a
 # tela em silêncio.
 #
-# O que devia existir: toda regra criada no nível de cima dos dois arquivos passa
-# por um `create` em cada passada. Se ele rodou na última, a regra está no banco.
-# Então só pode faltar aquela cujo `create` a última passada mandou e o banco
-# recusou: um erro contado em `inesperados`. O `do $$ ... $$` é uma transação só
-# (o `drop` e o `create` de dentro dele voltam juntos), e o psql que caiu no meio
-# já conta como erro (`anotar_saida`).
+# O que pode faltar: só a regra cujo `create` a última passada mandou e o banco
+# recusou (um erro contado em `inesperados`). O `create` que rodou deixou a regra
+# no banco; o `do $$ ... $$` é uma transação só (o `drop` e o `create` de dentro
+# dele voltam juntos); e o psql que caiu no meio já conta como erro
+# (`anotar_saida`).
 #
-# Por que não a lista do kit do upstream (hostgator-setup-kit/update.sh, um awk
-# que lê `create policy X on public.T` numa linha só): ela erra calada aqui. Há
-# 53 `create policy` no baseline.sql com o nome sozinho na linha e o `on` na de
+# Mas o `create` que perdeu nem sempre é a última palavra do arquivo sobre a
+# regra (parecer do Arquiteto, MIA-356):
+#   - redefinição: 29 regras têm mais de um `create` no nível de cima (o
+#     `trg_ai_agent_versions_content_immutable` tem 6). Recriar um `create` do
+#     meio deixaria a definição intermediária no banco, e o contador em 0;
+#   - apagada de vez: `crm_empresas_escrita` é criada e depois apagada pelo
+#     `drop` da baseline-mia.sql:10416. Recriar seria ressuscitá-la.
+# Por isso a conferência lê, nos três trechos da passada (o "antes do upstream",
+# o baseline.sql e o baseline-mia.sql, nessa ordem), os `drop` e `create` de
+# política e gatilho do NÍVEL DE CIMA (`mencoes_das_regras`; o que está dentro
+# de `$$`, de aspas ou de comentário não roda na passada e fica fora). Por regra:
+#   - o último `create` dela na passada não perdeu: a definição final rodou e o
+#     erro fica (é o mesmo veredito de antes desta conferência);
+#   - perdeu: ele é o único que pode voltar, e os `create` anteriores que
+#     perderam seguem o resultado dele;
+#   - depois dele vem um `drop` (apagada de vez): nada é recriado; o catálogo
+#     confirma que ela está fora e o erro sai, com uma linha no log;
+#   - senão: o catálogo (`pg_policy`, `pg_trigger` sem os internos) diz se ela
+#     está no banco. Está: o erro fica (é outro problema, por exemplo o `drop`
+#     que perdeu e deixou a definição antiga). Falta: o comando roda sozinho, com
+#     ON_ERROR_STOP, a espera curta e o mesmo `search_path` que vigorava no
+#     arquivo naquele ponto, em até TENTATIVAS rodadas; e o catálogo é lido de
+#     novo. Voltou: os erros da regra saem da contagem (o comando rodou, como a
+#     disputa curada na 2ª passada). Não voltou: viram uma linha "regra de
+#     isolamento fora do banco" no começo da amostra do carimbo, com `erros > 0`
+#     e `em_dia: false` na /health.
+#
+# O comando que roda de novo é o bloco STATEMENT do psql com o mesmo
+# `psql:<arquivo>:<linha>:` do erro (o psql recortou, ver `anotar_saida`). Por
+# que não a lista do kit do upstream (hostgator-setup-kit/update.sh, um awk que
+# lê `create policy X on public.T` numa linha só): ela erra calada aqui. Há 53
+# `create policy` no baseline.sql com o nome sozinho na linha e o `on` na de
 # baixo, entre eles os restritivos de `conversations` e `messages`; 84 estão em
 # `execute format(...)`; e o recorte dele para no primeiro `;` de fim de linha,
 # que pode ser um comentário dentro da regra.
 #
-# Para cada um desses erros:
-#   1. o comando é o bloco STATEMENT do psql com o mesmo `psql:<arquivo>:<linha>:`
-#      do erro (o psql recortou, ver `anotar_saida`);
-#   2. o nome e a tabela saem do cabeçalho dele, e o catálogo (`pg_policy`,
-#      `pg_trigger` sem os internos) diz se a regra está no banco;
-#   3. está: nada a fazer, e o erro fica (é outro problema, por exemplo o `drop`
-#      que perdeu e deixou a definição antiga);
-#   4. falta: o comando roda sozinho, com ON_ERROR_STOP e a espera curta, em até
-#      TENTATIVAS rodadas (a mesma espera das passadas), e o catálogo é lido de novo.
-#      Voltou: o erro sai da contagem (o comando rodou, como a disputa curada na
-#      2ª passada). Não voltou: o erro vira "regra de isolamento fora do banco" e
-#      vai para o começo da amostra do carimbo, com `erros > 0` e
-#      `em_dia: false` na /health.
-# O cabeçalho que não dá para ler, ou o catálogo que não responde, deixa o erro
-# como está e escreve um AVISO: nunca some calado.
-# Prova: tests/unit/bootstrap-confere-regras.test.ts e a etapa 3c do
-# scripts/ensaio-de-banco.sh. docs/fork/area-de-cobranca.md, seção 8.
+# Tudo o que não dá para ler (o cabeçalho, o comando fora da lista do nível de
+# cima, o arquivo que o leitor não fechou, o catálogo que não responde) deixa o
+# erro como está e escreve um AVISO: nunca some calado.
+# Prova: tests/unit/bootstrap-confere-regras.test.ts (com as cercas que leem os
+# dois baselines) e a etapa 3c do scripts/ensaio-de-banco.sh.
+# docs/fork/area-de-cobranca.md, seção 8.
 REGRAS=/tmp/regras
 
-# cabecalho_da_regra <arquivo.sql>: "politica|nome|tabela" ou "gatilho|nome|tabela",
-# ou nada quando o comando não tem a forma esperada. Só lê o cabeçalho: o
-# comando que roda é o arquivo inteiro, sem mudança.
+# O leitor de cabeçalho, um só para o comando que o psql recortou e para o
+# arquivo. `cabecalho(s)` dá "acao|tipo|nome|tabela" (acao: create ou drop;
+# tipo: politica ou gatilho) ou "" quando o comando não tem a forma esperada.
+# `tabela_normal(t)` é a tabela para comparar menções (sem aspas, com schema).
+LEITOR_DE_CABECALHO='
+function cabecalho(s,   l, tipo, acao, resto, nome, i, c, fim, lr, p) {
+  gsub(/[ \t\r\n]+/, " ", s); sub(/^ /, "", s)
+  l = tolower(s)
+  if (match(l, /^create policy /)) { tipo = "politica"; acao = "create" }
+  else if (match(l, /^create (or replace )?(constraint )?trigger /)) { tipo = "gatilho"; acao = "create" }
+  else if (match(l, /^drop policy (if exists )?/)) { tipo = "politica"; acao = "drop" }
+  else if (match(l, /^drop trigger (if exists )?/)) { tipo = "gatilho"; acao = "drop" }
+  else return ""
+  resto = substr(s, RLENGTH + 1)
+  if (substr(resto, 1, 1) == "\"") {
+    nome = ""; i = 2; fim = 0
+    while (i <= length(resto)) {
+      c = substr(resto, i, 1)
+      if (c == "\"") {
+        if (substr(resto, i + 1, 1) == "\"") { nome = nome "\""; i += 2; continue }
+        fim = i; break
+      }
+      nome = nome c; i++
+    }
+    if (!fim || nome == "") return ""
+    resto = substr(resto, fim + 1)
+  } else {
+    if (!match(resto, /^[^ "(;]+/)) return ""
+    nome = tolower(substr(resto, 1, RLENGTH)); resto = substr(resto, RLENGTH + 1)
+  }
+  lr = tolower(resto)
+  if (tipo == "politica" || acao == "drop") { if (!match(lr, /^ on /)) return ""; resto = substr(resto, 5) }
+  else { p = index(lr, " on "); if (!p) return ""; resto = substr(resto, p + 4) }
+  if (tolower(substr(resto, 1, 5)) == "only ") resto = substr(resto, 6)
+  if (!match(resto, /^[^ (;]+/)) return ""
+  return acao "|" tipo "|" nome "|" substr(resto, 1, RLENGTH)
+}
+function tabela_normal(t,   u) {
+  u = t
+  if (u !~ /"/) u = tolower(u)
+  gsub(/"/, "", u)
+  if (u !~ /\./) u = "public." u
+  return u
+}'
+
+# cabecalho_da_regra <arquivo.sql>: "tipo|nome|tabela|tabela_normal" do
+# `create` de política ou gatilho, ou nada. Só lê o cabeçalho: o comando que
+# roda é o arquivo inteiro, sem mudança.
 cabecalho_da_regra() {
-  awk '
+  awk "$LEITOR_DE_CABECALHO"'
     { s = s " " $0 }
     END {
-      gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s)
-      l = tolower(s)
-      if (match(l, /^create policy /)) tipo = "politica"
-      else if (match(l, /^create (or replace )?(constraint )?trigger /)) tipo = "gatilho"
-      else exit
-      resto = substr(s, RLENGTH + 1)
-      if (substr(resto, 1, 1) == "\"") {
-        nome = ""; i = 2; fim = 0
-        while (i <= length(resto)) {
-          c = substr(resto, i, 1)
-          if (c == "\"") {
-            if (substr(resto, i + 1, 1) == "\"") { nome = nome "\""; i += 2; continue }
-            fim = i; break
-          }
-          nome = nome c; i++
-        }
-        if (!fim || nome == "") exit
-        resto = substr(resto, fim + 1)
-      } else {
-        if (!match(resto, /^[^ "(]+/)) exit
-        nome = tolower(substr(resto, 1, RLENGTH)); resto = substr(resto, RLENGTH + 1)
-      }
-      lr = tolower(resto)
-      if (tipo == "politica") { if (!match(lr, /^ on /)) exit; resto = substr(resto, 5) }
-      else { p = index(lr, " on "); if (!p) exit; resto = substr(resto, p + 4) }
-      if (tolower(substr(resto, 1, 5)) == "only ") resto = substr(resto, 6)
-      if (!match(resto, /^[^ (;]+/)) exit
-      print tipo "|" nome "|" substr(resto, 1, RLENGTH)
+      r = cabecalho(s)
+      if (r !~ /^create[|]/) exit
+      split(r, p, "|")
+      print p[2] "|" p[3] "|" p[4] "|" tabela_normal(p[4])
     }
   ' "$1"
+}
+
+# mencoes_das_regras <arquivo>...: para cada `drop` ou `create` de política ou
+# gatilho do NÍVEL DE CIMA, na ordem em que o psql os roda:
+#   idx|linha|acao|tipo|nome|tabela_normal|search_path
+# idx é a posição do arquivo nos argumentos; linha é a do `;` (a que o psql cita
+# no erro); search_path é o último `set_config('search_path', ...)` ou `set
+# search_path` do nível de cima antes dele, no mesmo arquivo (cada arquivo é um
+# psql novo). No fim de cada arquivo, "fim|idx|ok", ou "fim|idx|aberto" quando o
+# arquivo acabou dentro de aspas, de `$$` ou de comentário: aí o leitor não
+# entendeu o arquivo, e a conferência não confia nele. É o mesmo corte do psql:
+# `$tag$`, aspas simples e duplas, `--` e `/* */`. Cerca:
+# tests/unit/bootstrap-confere-regras.test.ts.
+mencoes_das_regras() {
+  awk "$LEITOR_DE_CABECALHO"'
+    function guarda(x) { if (length(st) < 600) st = st x }
+    function fecha() { if (idx) print "fim|" idx "|" ((dq == "" && !emq && !embl) ? "ok" : "aberto") }
+    BEGIN { for (a = 1; a < ARGC; a++) posicao[ARGV[a]] = a; aspa = sprintf("%c", 39); especial = "[$\"/;" aspa "-]" }
+    FNR == 1 { fecha(); idx = posicao[FILENAME]; dq = ""; emq = 0; embl = 0; st = ""; sp = "" }
+    {
+      linha = $0; n = length(linha); i = 1
+      while (i <= n) {
+        resto = substr(linha, i)
+        if (dq != "") {
+          p = index(resto, dq); if (!p) { guarda(resto); break }
+          guarda(substr(resto, 1, p - 1 + length(dq))); i += p - 1 + length(dq); dq = ""; continue
+        }
+        if (emq) {
+          p = index(resto, aspa); if (!p) { guarda(resto); break }
+          if (substr(resto, p + 1, 1) == aspa) { guarda(substr(resto, 1, p + 1)); i += p + 1; continue }
+          guarda(substr(resto, 1, p)); i += p; emq = 0; continue
+        }
+        if (embl) { p = index(resto, "*/"); if (!p) break; i += p + 1; embl = 0; continue }
+        if (!match(resto, especial)) { guarda(resto); break }
+        if (RSTART > 1) { guarda(substr(resto, 1, RSTART - 1)); i += RSTART - 1; continue }
+        c = substr(linha, i, 1)
+        if (substr(resto, 1, 2) == "--") break
+        if (substr(resto, 1, 2) == "/*") { embl = 1; i += 2; continue }
+        if (c == aspa) { emq = 1; guarda(c); i++; continue }
+        if (c == "\"") {
+          p = index(substr(resto, 2), "\""); if (!p) { guarda(resto); break }
+          guarda(substr(resto, 1, p + 1)); i += p + 1; continue
+        }
+        if (c == "$" && (i == 1 || substr(linha, i - 1, 1) !~ /[A-Za-z0-9_$]/) && match(resto, /^[$]([A-Za-z_][A-Za-z_0-9]*)?[$]/)) {
+          dq = substr(resto, 1, RLENGTH); guarda(dq); i += RLENGTH; continue
+        }
+        if (c == ";") {
+          r = cabecalho(st)
+          if (r != "") {
+            split(r, q, "|")
+            print idx "|" FNR "|" q[1] "|" q[2] "|" q[3] "|" tabela_normal(q[4]) "|" sp
+          } else {
+            t = st; gsub(/[ \t\r\n]+/, " ", t); sub(/^ /, "", t); lt = tolower(t)
+            if (lt ~ /^select (pg_catalog[.])?set_config[(] ?.search_path.,/ || lt ~ /^set (session )?search_path[ =]/) sp = t ";"
+          }
+          st = ""; i++; continue
+        }
+        guarda(c); i++
+      }
+      if (dq == "" && !emq) guarda(" ")
+    }
+    END { fecha() }
+  ' "$@"
 }
 
 # regra_no_banco <tipo> <nome> <tabela>: "1" (está), "0" (falta) ou nada (o
@@ -270,6 +371,15 @@ trocar_erro() {
     !feito && index($0, ENVIRON["CHAVE"]) == 1 { feito = 1; if (ENVIRON["NOVA"] != "") print ENVIRON["NOVA"]; next }
     { print }
   ' | grep . || true)"
+}
+
+# trocar_erros_da_regra <n> <linha nova>: o erro do `create` n vira a linha nova
+# (nada = sai), e os dos `create` anteriores da mesma regra que o seguem saem.
+trocar_erros_da_regra() {
+  trocar_erro "$(cat "$1.chave")" "$2"
+  if [ -f "$1.seguem" ]; then
+    while read -r chave_anterior; do trocar_erro "$chave_anterior" ""; done < "$1.seguem"
+  fi
 }
 
 conferir_regras() {
@@ -298,8 +408,13 @@ conferir_regras() {
   ' "$COMANDOS_PASSADA"
   ls "$REGRAS"/*.sql > /dev/null 2>&1 || { log "regras de isolamento: nenhuma política ou gatilho perdeu na última passada"; return 0; }
 
-  : > "$REGRAS/faltam"
-  : > "$REGRAS/feitas"
+  # A passada inteira, na ordem: 1 = o trecho "antes do upstream" (o psql o lê
+  # de <stdin>), 2 = o baseline.sql (o arquivo que o psql leu, a cópia com
+  # espera curta), 3 = o baseline-mia.sql.
+  sed -n '/^-- >>> ANTES DO BASELINE DO UPSTREAM/,/^-- <<< ANTES DO BASELINE DO UPSTREAM/p' "$BASELINE_MIA" > "$REGRAS/antes.trecho"
+  mencoes_das_regras "$REGRAS/antes.trecho" "$ARQUIVO_DO_UPSTREAM" "$BASELINE_MIA" > "$REGRAS/mencoes"
+
+  : > "$REGRAS/candidatos"
   for sql in "$REGRAS"/*.sql; do
     n="${sql%.sql}"
     chave="$(cat "$n.chave")"
@@ -308,16 +423,78 @@ conferir_regras() {
       log "AVISO: não li o nome da regra do comando em ${chave#psql:} (fica como erro)"
       continue
     fi
-    tipo="${cab%%|*}"; resto="${cab#*|}"; nome="${resto%%|*}"; tabela="${resto#*|}"
+    tipo="${cab%%|*}"; resto="${cab#*|}"; nome="${resto%%|*}"; resto="${resto#*|}"; tabela="${resto%%|*}"; normal="${resto#*|}"
     rotulo="$( [ "$tipo" = politica ] && printf 'política' || printf 'gatilho' ) ${nome} em ${tabela}"
     printf '%s\n' "$rotulo" > "$n.rotulo"
     printf '%s|%s|%s\n' "$tipo" "$nome" "$tabela" > "$n.cab"
-    case "$(regra_no_banco "$tipo" "$nome" "$tabela")" in
-      0) printf '%s\n' "$n" >> "$REGRAS/faltam" ;;
-      1) log "regras de isolamento: ${rotulo} está no banco (o erro em ${chave#psql:} é outro e fica)" ;;
-      *) log "AVISO: não li o catálogo para ${rotulo} (o erro fica)" ;;
-    esac
+    onde="${chave#psql:}"; onde="${onde%:}"; linha="${onde##*:}"; arquivo="${onde%:*}"
+    if [ "$arquivo" = "<stdin>" ]; then idx=1
+    elif [ "$arquivo" = "$ARQUIVO_DO_UPSTREAM" ]; then idx=2
+    elif [ "$arquivo" = "$BASELINE_MIA" ]; then idx=3
+    else idx=0; fi
+    printf '%s|%s|%s|%s|%s|%s\n' "$n" "$idx" "$linha" "$tipo" "$nome" "$normal" >> "$REGRAS/candidatos"
   done
+
+  # A decisão por regra (o comentário lá em cima): n|decisao|detalhe.
+  NOMES="antes do upstream (baseline-mia.sql)|baseline.sql|baseline-mia.sql" awk -F'|' '
+    function onde(o,   nomes) { split(ENVIRON["NOMES"], nomes, "|"); return nomes[m_idx[o]] ":" m_lin[o] }
+    FNR == NR {
+      if ($1 == "fim") { ok[$2] = ($3 == "ok"); next }
+      o++; k = $4 "|" $5 "|" $6; m_idx[o] = $1; m_lin[o] = $2; m_acao[o] = $3
+      sp = $0; for (j = 1; j <= 6; j++) sub(/^[^|]*[|]/, "", sp); m_sp[o] = sp
+      ultima[k] = o
+      if ($3 == "create") { ultimo_create[k] = o; no_arquivo[$1 "|" $2 "|" k] = o }
+      next
+    }
+    {
+      k = $4 "|" $5 "|" $6; e = no_arquivo[$2 "|" $3 "|" k]
+      if (!ok[$2] || !e) { print $1 "|naoachei|"; next }
+      nc++; cand[nc] = $1; regra[$1] = k; pos[$1] = e
+      if (e == ultimo_create[k]) lider[k] = $1
+    }
+    END {
+      for (i = 1; i <= nc; i++) {
+        n = cand[i]; k = regra[n]
+        if (!(k in lider)) print n "|final_rodou|" onde(ultimo_create[k])
+        else if (lider[k] != n) print n "|segue|" lider[k]
+        else if (m_acao[ultima[k]] == "drop") print n "|apagada|" onde(ultima[k])
+        else print n "|recriar|" m_sp[pos[n]]
+      }
+    }
+  ' "$REGRAS/mencoes" "$REGRAS/candidatos" > "$REGRAS/decisoes"
+
+  # Primeiro quem segue quem (o líder vem depois, na ordem do arquivo).
+  while IFS='|' read -r n decisao detalhe; do
+    [ "$decisao" = segue ] && cat "$n.chave" >> "$detalhe.seguem"
+  done < "$REGRAS/decisoes"
+
+  : > "$REGRAS/faltam"
+  : > "$REGRAS/feitas"
+  while IFS='|' read -r n decisao detalhe; do
+    chave="$(cat "$n.chave")"; rotulo="$(cat "$n.rotulo")"; cab="$(cat "$n.cab")"
+    tipo="${cab%%|*}"; resto="${cab#*|}"; nome="${resto%%|*}"; tabela="${resto#*|}"
+    case "$decisao" in
+      naoachei)
+        log "AVISO: não achei o create de ${rotulo} em ${chave#psql:} entre os comandos do nível de cima do arquivo (fica como erro)" ;;
+      final_rodou)
+        log "regras de isolamento: ${rotulo}: o último create dela (${detalhe}) rodou; o erro em ${chave#psql:} fica" ;;
+      segue) ;;
+      apagada)
+        case "$(regra_no_banco "$tipo" "$nome" "$tabela")" in
+          0) log "regras de isolamento: ${rotulo} fica fora do banco, como o arquivo quer (o drop de ${detalhe} a apaga depois do create de ${chave#psql:})"
+             trocar_erros_da_regra "$n" "" ;;
+          1) log "regras de isolamento: ${rotulo} está no banco, e o arquivo a apaga em ${detalhe} (o erro em ${chave#psql:} fica)" ;;
+          *) log "AVISO: não li o catálogo para ${rotulo} (o erro fica)" ;;
+        esac ;;
+      recriar)
+        printf '%s\n' "$detalhe" > "$n.search_path"
+        case "$(regra_no_banco "$tipo" "$nome" "$tabela")" in
+          0) printf '%s\n' "$n" >> "$REGRAS/faltam" ;;
+          1) log "regras de isolamento: ${rotulo} está no banco (o erro em ${chave#psql:} é outro e fica)" ;;
+          *) log "AVISO: não li o catálogo para ${rotulo} (o erro fica)" ;;
+        esac ;;
+    esac
+  done < "$REGRAS/decisoes"
   [ -s "$REGRAS/faltam" ] || return 0
 
   log "regras de isolamento: $(grep -c . "$REGRAS/faltam") fora do banco depois da última passada; recriando só essas, do próprio arquivo"
@@ -326,7 +503,12 @@ conferir_regras() {
     : > "$REGRAS/de-novo"
     while read -r n; do
       rc=0
-      psql "$DB" -q -v ON_ERROR_STOP=1 -c "$ESPERA_CURTA" -f "$n.sql" < /dev/null > "$n.saida" 2>&1 || rc=$?
+      caminho="$(cat "$n.search_path")"
+      if [ -n "$caminho" ]; then
+        psql "$DB" -q -v ON_ERROR_STOP=1 -c "$ESPERA_CURTA" -c "$caminho" -f "$n.sql" < /dev/null > "$n.saida" 2>&1 || rc=$?
+      else
+        psql "$DB" -q -v ON_ERROR_STOP=1 -c "$ESPERA_CURTA" -f "$n.sql" < /dev/null > "$n.saida" 2>&1 || rc=$?
+      fi
       if [ "$rc" -ne 0 ] && [ "$rodada" -lt "$TENTATIVAS" ] && grep -qiE "$DISPUTA" "$n.saida"; then
         printf '%s\n' "$n" >> "$REGRAS/de-novo"
       else
@@ -346,11 +528,11 @@ conferir_regras() {
     tipo="${cab%%|*}"; resto="${cab#*|}"; nome="${resto%%|*}"; tabela="${resto#*|}"
     if [ "$(regra_no_banco "$tipo" "$nome" "$tabela")" = 1 ]; then
       log "regras de isolamento: ${rotulo} voltou ao banco"
-      trocar_erro "$chave" ""
+      trocar_erros_da_regra "$n" ""
     else
       motivo="$(grep -iE 'ERROR|FATAL|lock timeout|deadlock' "$n.saida" | head -1 | sed 's/^psql:[^ ]* //' || true)"
       log "AVISO: regras de isolamento: ${rotulo} continua FORA do banco (${motivo:-o psql não disse por quê})"
-      trocar_erro "$chave" "regra de isolamento fora do banco: ${rotulo} (o create de ${chave#psql:} perdeu e não voltou: ${motivo:-sem motivo no psql})"
+      trocar_erros_da_regra "$n" "regra de isolamento fora do banco: ${rotulo} (o create de ${chave#psql:} perdeu e não voltou: ${motivo:-sem motivo no psql})"
     fi
   done < "$REGRAS/feitas"
 }

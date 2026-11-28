@@ -242,6 +242,29 @@ a última passada mandou e o banco recusou, e esse é um erro contado. Os outros
 o `do $$ ... $$` é uma transação só (o `drop` e o `create` de dentro dele voltam juntos), e o `psql`
 que caiu no meio conta (item 4).
 
+**A última palavra do arquivo sobre a regra** (parecer do Arquiteto, MIA-356). O `create` que
+perdeu nem sempre é o que deixa a regra como o arquivo quer:
+- **redefinição:** 29 regras têm mais de um `create` no nível de cima (o
+  `trg_ai_agent_versions_content_immutable` tem 6). Recriar um `create` do meio deixaria a
+  definição intermediária no banco, com o contador em 0;
+- **apagada de vez:** a `crm_empresas_escrita` é criada no `baseline-mia.sql` e apagada de vez pelo
+  `drop` da `:10416`. Recriá-la seria ressuscitar uma regra que o arquivo tira.
+
+Por isso a conferência lê, nos três trechos da passada e na ordem dela (o "antes do upstream", o
+`baseline.sql` e o `baseline-mia.sql`), os `drop` e `create` de política e gatilho do **nível de
+cima** (`mencoes_das_regras`). O que está dentro de `$$`, de aspas ou de comentário não roda na
+passada e fica fora: por exemplo, os três `create policy email_cadences_select` do `baseline.sql`
+moram no corpo de `fn_cadencias_provisionar` e só rodam quando a função é chamada. O corte é o
+mesmo do `psql` (`$tag$`, aspas simples e duplas, `--` e `/* */`), e a linha de cada comando é a do
+`;`, que é a que o `psql` cita no erro. Por regra:
+- **o último `create` dela não perdeu:** a definição final rodou. Nada é recriado e o erro fica,
+  como antes desta conferência;
+- **o último `create` perdeu:** só ele pode voltar. Os `create` anteriores que perderam seguem o
+  resultado dele (voltou: os erros saem; não voltou: uma linha só de "fora do banco");
+- **depois dele vem um `drop`:** a regra é apagada de vez. Nada é recriado. O catálogo confirma que
+  ela está fora e o erro sai, com uma linha no log. Se ela estiver no banco (o `drop` final também
+  perdeu), o erro fica.
+
 **Por que não a lista do kit do upstream** (`hostgator-setup-kit/update.sh`, um `awk` que lê
 `create policy X on public.T` numa linha só e recorta até o primeiro `;` de fim de linha). Aqui ela
 erra calada:
@@ -268,7 +291,9 @@ erra calada:
    Os valores vão por variável do `psql`.
 4. **A regra que está no banco** (o `drop` também perdeu e ficou a definição antiga) não é tocada, e
    o erro fica.
-5. **A regra que falta** roda sozinha, com `ON_ERROR_STOP` e a espera curta. Se perder a disputa de
+5. **A regra que falta** roda sozinha, com `ON_ERROR_STOP`, a espera curta e o mesmo `search_path`
+   que vigorava no arquivo naquele ponto (o `baseline.sql` fixa `public, extensions` na `:6291`;
+   antes disso, e no `baseline-mia.sql` sem `set`, roda sem nada). Se perder a disputa de
    novo, tenta outra vez, até `TENTATIVAS` rodadas com as mesmas esperas das passadas. Depois, o
    catálogo é lido de novo:
    - **voltou:** o erro sai da contagem (o comando rodou, como a disputa curada na passada 2);
@@ -276,14 +301,20 @@ erra calada:
      de <arquivo>:<linha>: perdeu e não voltou: <erro>)`, entra no começo da amostra e mantém
      `erros > 0`. A `/health` dá `em_dia: false` e o trem para no passo 11. A ação é reimplantar
      assim que a disputa passar, e não esperar o próximo trem.
-6. **Nunca some calado.** Cabeçalho que não dá para ler ou catálogo que não responde deixam o erro
-   como está, com um `AVISO` no log. Nada é recriado às cegas.
+6. **Nunca some calado.** Cabeçalho que não dá para ler, comando que não está entre os do nível de
+   cima do arquivo, arquivo que o leitor não fechou (acabou dentro de aspas ou de `$$`) e catálogo
+   que não responde deixam o erro como está, com um `AVISO` no log. Nada é recriado às cegas.
 7. **Log:** `regras de isolamento: N fora do banco depois da última passada; recriando só essas`,
    uma linha por regra (`... voltou ao banco` ou `AVISO: ... continua FORA do banco (<erro>)`) e os
    arquivos em `/tmp/regras/`.
 
 **Cerca.** O bloco `STATEMENT` termina na próxima linha que começa com `psql:`. Por isso nenhuma
-linha dos dois baselines pode começar assim (`tests/unit/bootstrap-confere-regras.test.ts`).
+linha dos dois baselines pode começar assim. E o leitor do nível de cima, rodando nos dois arquivos
+de verdade: fecha os três trechos; a única regra apagada de vez é a `crm_empresas_escrita`; os
+quatro restritivos de `conversations` e `messages` são `create` do nível de cima, com o
+`search_path` da `:6291`; o `email_cadences_select` não é. Uma regra nova criada e apagada de vez,
+ou um arquivo que confunda o leitor, para aqui, e não no deploy
+(`tests/unit/bootstrap-confere-regras.test.ts`).
 
 **Fora desta peça.** Não reaplica um `do $$ ... $$` que falhou, não reaplica o par `drop`/`create`
 quando o `drop` perdeu (a regra antiga fica e o erro conta), e não cobre regra criada só dentro de
@@ -315,14 +346,19 @@ A conferência das regras (8.1):
   - está no banco e não é tocada;
   - o catálogo não responde;
   - um gatilho;
-  - a regra volta e um erro de verdade fica.
+  - a regra volta e um erro de verdade fica;
+  - redefinição: dois `create` da mesma regra perderam, e só o último roda (volta e não volta);
+  - só o `create` antigo perdeu e o final rodou: nada é recriado;
+  - apagada de vez: nada é recriado, e o erro sai (ou fica, se ela está no banco);
+  - o `create` do erro está dentro de `$$`: `AVISO`, e o erro fica.
 - A etapa 3c do `scripts/ensaio-de-banco.sh` roda o bootstrap de verdade. Um gatilho de evento do
   ensaio (`ddl_command_start`, CREATE POLICY) faz o `create` de
   `conversation_participant_read_is_not_control_update` (restritiva, `conversations`) perder a
   disputa por lock timeout de verdade nas 3 passadas, enquanto o `drop` ganha. Ele tenta um lock
   numa tabela que outra sessão segura, nas 3 primeiras vezes, contadas por uma sequência. A etapa
   confere que a regra ficou fora, voltou pela conferência na 4ª vez, restritiva e com a mesma
-  definição, e que o carimbo ficou com 0. Apagar a regra à mão antes do bootstrap não provaria
+  definição, que todas as políticas e gatilhos do `public` ficaram iguais aos da etapa 3, com a
+  definição inteira, e que o carimbo ficou com 0. Apagar a regra à mão antes do bootstrap não provaria
   nada, porque a passada a recria sozinha.
 
 ## 9. Desvios do protótipo e lacunas
