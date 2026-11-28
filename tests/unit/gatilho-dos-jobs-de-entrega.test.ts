@@ -235,6 +235,16 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "ou em run de head já superado (#2449), e nesse caso o agregador REPROVA de propósito: " +
       "vigia em e2e-so-aceita-pulo-declarado.test.ts.",
   },
+  // FORK MIA (MIA-360): o build único do e2e. Mesmo `if:` do `e2e-parte` (vigiado
+  // por e2e-build-unico-igual-ao-da-parte.test.ts), porque as partes têm `needs` nele.
+  "e2e.yml::e2e-build": {
+    condicao:
+      "needs.e2e-alcance.outputs.e2e == 'sim' && needs.e2e-alcance.outputs.head_velho != 'sim'",
+    efeito:
+      "Faz o `pnpm e2e:build` uma vez por rodada e sobe o `.next` para as partes. Pula " +
+      "junto com elas (mesma condição); se falha, as partes ficam `skipped` e o agregador " +
+      "`e2e` reprova.",
+  },
   "e2e.yml::e2e": {
     condicao: "always()",
     efeito:
