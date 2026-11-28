@@ -266,12 +266,22 @@ janela de tempo, então só pagina. Trava ilegível ou cortada tira a regra da r
 (`pulados.trava_ilegivel`) em vez de avisar de novo, também nas duas leituras da trava do
 aniversário, que antes ignoravam o erro. Teste: `tests/unit/crons-de-automacao-por-tempo-leem-tudo.test.ts`.
 
+Os dois crons de devolução (MIA-373, 28/11/2026): `handoff-devolucao` (ao agente) lê as empresas com
+prazo, os agentes publicados delas e os roteadores ativos delas paginados por `id`; `rodizio-devolucao`
+(à fila) lê as empresas com prazo do mesmo jeito. As leituras já eram filtradas pelo que o cron usa
+(só empresa com o prazo ligado, só agente publicado e roteador ativo dessas empresas), então só
+paginam. Cortada ou ilegível, a rodada sai 500 e nada é devolvido. Antes, a empresa fora da primeira
+página nunca tinha devolução, e o agente ou roteador fora dela fazia a sessão parecer sem ninguém que
+atenda. O `SCAN_LIMIT` das conversas e o `ASSIGNMENT_EVENT_LIMIT` não mudaram. Teste:
+`tests/unit/crons-de-devolucao-leem-tudo.test.ts`.
+
 **O que a cerca não vê.** `rpc(...)`, o `workers/` da raiz, se o teto que existe é o certo (um
 `.limit(5000)` passa e devolve 1000) e se a ordem da paginação é estável. Esses ficam com a revisão.
 
 ```bash
 npx vitest run tests/unit/leitura-sem-teto-em-worker-e-cron.test.ts lib/leitura/todas-as-paginas.test.ts \
-  tests/unit/crons-de-proposta-leem-tudo.test.ts tests/unit/crons-de-automacao-por-tempo-leem-tudo.test.ts
+  tests/unit/crons-de-proposta-leem-tudo.test.ts tests/unit/crons-de-automacao-por-tempo-leem-tudo.test.ts \
+  tests/unit/crons-de-devolucao-leem-tudo.test.ts
 ```
 
 ---

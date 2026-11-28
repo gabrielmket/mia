@@ -165,27 +165,6 @@ const CONHECIDAS: readonly Conhecida[] = [
     motivo: "Uma linha por id, e os ids vêm de leitura com `.limit(LIMITE_DA_VARREDURA)` (500).",
   },
   {
-    arquivo: `${CRON}/handoff-devolucao/route.ts`,
-    tabela: "organizations",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "As empresas com prazo de devolução, da instalação inteira.",
-  },
-  {
-    arquivo: `${CRON}/handoff-devolucao/route.ts`,
-    tabela: "ai_agents",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "Os agentes publicados de todas as empresas com prazo; cresce com a instalação.",
-  },
-  {
-    arquivo: `${CRON}/handoff-devolucao/route.ts`,
-    tabela: "ai_routers",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "Os roteadores ativos de todas as empresas com prazo; cresce com a instalação.",
-  },
-  {
     arquivo: `${CRON}/kb-conversations-batch/route.ts`,
     tabela: "ai_agents",
     quantas: 1,
@@ -233,13 +212,6 @@ const CONHECIDAS: readonly Conhecida[] = [
     quantas: 1,
     classe: "resolvido",
     motivo: "Trocada por `lerTodasAsPaginas` no PR #168 (MIA-320), que entra na .120.",
-  },
-  {
-    arquivo: `${CRON}/rodizio-devolucao/route.ts`,
-    tabela: "organizations",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "As empresas com prazo de devolução ao rodízio, da instalação inteira.",
   },
   {
     arquivo: `${CRON}/sync-model-catalog/route.ts`,
