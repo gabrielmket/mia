@@ -264,17 +264,18 @@ pagamento). **Mora em** `lib/area-de-cobranca/`, `components/area-de-cobranca/`,
 `app/admin/(protected)/empresas-do-cadastro/page.tsx` (funil, coluna e botão),
 `components/pagamento-inicial/CamposFiscais.tsx` (prop `documentoTravado`),
 `lib/mcp-plataforma/ferramentas/plataforma.ts` (`cobrancas` no `plataforma_ver_cliente`),
-`easypanel/bootstrap.sh` (aplica o schema com espera curta por lock e repete a passada inteira, até 3 vezes, quando algum comando perde a disputa; MIA-348), `lib/assistente/manuais-das-telas.ts`.
+`easypanel/bootstrap.sh` (aplica o schema com espera curta por lock e repete a passada inteira, até 3 vezes, quando algum comando perde a disputa; MIA-348; depois da última passada, recria do próprio arquivo a política ou o gatilho que ficou fora do banco, e o que não voltar conta em `schema.erros`; MIA-354), `lib/assistente/manuais-das-telas.ts`.
 
 **Protege.** `tests/unit/area-de-cobranca-regras.test.ts`, `area-de-cobranca-leitura.test.ts`,
 `area-de-cobranca-servico.test.ts`, `area-de-cobranca-cartao-fora-dos-registros.test.ts`,
 `area-de-cobranca.test.ts`, `cadastro-sem-pagamento-apagar.test.ts`,
-`bootstrap-reaplica-no-deadlock.test.ts`, `baseline-do-upstream-zera-o-lock-timeout.test.ts`,
-`mcp-de-implantacao-area-de-cobranca.test.ts`; a etapa 3b do `scripts/ensaio-de-banco.sh`.
+`bootstrap-reaplica-no-deadlock.test.ts`, `bootstrap-confere-regras.test.ts`,
+`baseline-do-upstream-zera-o-lock-timeout.test.ts`, `mcp-de-implantacao-area-de-cobranca.test.ts`;
+as etapas 3b e 3c do `scripts/ensaio-de-banco.sh`.
 
 **Conferir.**
 1. `git grep -n "FORK MIA" -- app/app/settings/billing/page.tsx app/admin/\(protected\)/empresas-do-cadastro/page.tsx easypanel/bootstrap.sh`.
-2. `npx vitest run tests/unit/area-de-cobranca-servico.test.ts tests/unit/bootstrap-reaplica-no-deadlock.test.ts tests/unit/area-de-cobranca-cartao-fora-dos-registros.test.ts`.
+2. `npx vitest run tests/unit/area-de-cobranca-servico.test.ts tests/unit/bootstrap-reaplica-no-deadlock.test.ts tests/unit/bootstrap-confere-regras.test.ts tests/unit/area-de-cobranca-cartao-fora-dos-registros.test.ts`.
 3. MCP (lê só): `plataforma_ver_cobranca` e `plataforma_ver_cliente` na demonstração.
 
 **Riscos.** O cartão nunca pode aparecer em registro nenhum (só final e bandeira); "Apagar o cadastro"
@@ -1111,7 +1112,7 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | # | função | documento | migrations | testes principais |
 |---|---|---|---|---|
 | 1 | Agenda Microsoft 365 | `agenda-microsoft.md` | 9011, 9014, 9015, 9016, 9044 | `agenda-microsoft.test.ts`, `agenda-do-atendente-ve-a-ocupacao-do-dono.test.ts` |
-| 2 | Área de cobrança | `area-de-cobranca.md` | 9125, 9126 | `area-de-cobranca-servico.test.ts`, `bootstrap-reaplica-no-deadlock.test.ts` |
+| 2 | Área de cobrança | `area-de-cobranca.md` | 9125, 9126 | `area-de-cobranca-servico.test.ts`, `bootstrap-reaplica-no-deadlock.test.ts`, `bootstrap-confere-regras.test.ts` |
 | 3 | Assistente da MIA | `assistente.md` | 9050-9052, 9080-9082, 9090, 9091, 9100, 9101 | `assistente-faz-com-aprovacao.test.ts`, `assistente-ajuda-cobre-todas-as-telas.test.ts` |
 | 4 | Broadcast unificado | `broadcast-unificado.md` | nenhuma | `broadcast-unificado.test.ts`, `navegacao-completude.test.ts` |
 | 5 | Cartões e fichas | `cartoes-e-fichas.md` | 9012, 9013 (0264) | `cartao-fechado-mia.test.tsx`, `pessoas-do-negocio-dos-dois-modelos.test.ts` |

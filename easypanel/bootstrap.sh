@@ -112,7 +112,7 @@ existentes="$(printf '%s' "$existentes" | tr -d '[:space:]')"
 antes_do_upstream() {
   rc=0
   sed -n '/^-- >>> ANTES DO BASELINE DO UPSTREAM/,/^-- <<< ANTES DO BASELINE DO UPSTREAM/p' "$BASELINE_MIA" \
-    | psql "$DB" -q -c "$ESPERA_CURTA" -f - > /tmp/baseline-arquivo.log 2>&1 || rc=$?
+    | psql "$DB" -q -b -c "$ESPERA_CURTA" -f - > /tmp/baseline-arquivo.out 2> /tmp/baseline-arquivo.err || rc=$?
   anotar_saida "$rc"
 }
 
@@ -120,7 +120,7 @@ antes_do_upstream() {
 # (MIA-348, no bloco do modo update abaixo).
 aplicar_arquivo() {
   rc=0
-  psql "$DB" -q -c "$ESPERA_CURTA" -f "$1" > /tmp/baseline-arquivo.log 2>&1 || rc=$?
+  psql "$DB" -q -b -c "$ESPERA_CURTA" -f "$1" > /tmp/baseline-arquivo.out 2> /tmp/baseline-arquivo.err || rc=$?
   anotar_saida "$rc"
 }
 
@@ -128,7 +128,26 @@ aplicar_arquivo() {
 # não chegou ao fim do arquivo vira uma linha no arquivo de quedas. A causa
 # citada é a última linha que não é continuação indentada (a última de todas
 # costuma ser a dica "Is the server running…", e não o motivo).
+#
+# FORK MIA (dívida 5, MIA-354): o `-b` (--echo-errors) faz o psql escrever, logo
+# depois de cada erro, `psql:<arquivo>:<linha>: STATEMENT:  <o comando inteiro>`,
+# exatamente como ele leu do arquivo e mandou ao banco. É o que a
+# `conferir_regras` roda de novo: quem recorta o comando é o psql, e não um
+# segundo leitor de SQL aqui. Os blocos STATEMENT vão para o arquivo de comandos
+# da passada e saem do log: o texto de um comando tem "error" em nome de coluna,
+# e a contagem (`grep -i ERROR`) tem de continuar a mesma de antes. Um bloco
+# termina na próxima linha que começa com `psql:` (cerca: nenhuma linha dos dois
+# baselines começa assim, tests/unit/bootstrap-confere-regras.test.ts).
 anotar_saida() {
+  COMANDOS="$COMANDOS_PASSADA" awk '
+    /^psql:[^:]*:[0-9]+: STATEMENT:  / { no_comando = 1; print >> ENVIRON["COMANDOS"]; next }
+    /^psql:/ { no_comando = 0 }
+    no_comando { print >> ENVIRON["COMANDOS"]; next }
+    { print }
+  ' /tmp/baseline-arquivo.err > /tmp/baseline-arquivo.msg
+  # O stdout (resultado de `select`) vem antes: a causa da queda é a última linha
+  # do stderr, e não um "(1 row)".
+  cat /tmp/baseline-arquivo.out /tmp/baseline-arquivo.msg > /tmp/baseline-arquivo.log
   cat /tmp/baseline-arquivo.log >> "$LOG_PASSADA"
   if [ "$1" -ne 0 ]; then
     causa="$(grep -v '^[[:space:]]' /tmp/baseline-arquivo.log | grep . | tail -1 || true)"
@@ -142,12 +161,198 @@ anotar_saida() {
 # Deixa em `inesperados` os erros que não são benignos, mais as quedas.
 aplicar_passada() {
   LOG_PASSADA="/tmp/baseline-passada-$1.log"
+  COMANDOS_PASSADA="/tmp/baseline-comandos-$1.log"
   : > "$LOG_PASSADA"
+  : > "$COMANDOS_PASSADA"
   : > /tmp/baseline-quedas.log
   antes_do_upstream
   aplicar_arquivo "$ARQUIVO_DO_UPSTREAM"
   aplicar_arquivo "$BASELINE_MIA"
   inesperados="$( { grep -iE 'ERROR|FATAL' "$LOG_PASSADA" | grep -viE "$BENIGNOS"; cat /tmp/baseline-quedas.log; } | grep . || true)"
+}
+
+# ── FORK MIA (dívida 5, MIA-354): a conferência das regras de isolamento ─────
+#
+# O `drop policy if exists` e o `create policy` (e o mesmo par dos gatilhos) são
+# dois comandos. Com a espera curta, o `drop` pode ganhar a disputa e o `create`
+# perder, na última passada: a regra fica FORA do banco até o próximo deploy. Uma
+# política restritiva faltando AMPLIA o acesso (as de `conversations`, `messages`
+# e `calendar_appointments` no baseline.sql); uma permissiva faltando esvazia a
+# tela em silêncio.
+#
+# O que devia existir: toda regra criada no nível de cima dos dois arquivos passa
+# por um `create` em cada passada. Se ele rodou na última, a regra está no banco.
+# Então só pode faltar aquela cujo `create` a última passada mandou e o banco
+# recusou: um erro contado em `inesperados`. O `do $$ ... $$` é uma transação só
+# (o `drop` e o `create` de dentro dele voltam juntos), e o psql que caiu no meio
+# já conta como erro (`anotar_saida`).
+#
+# Por que não a lista do kit do upstream (hostgator-setup-kit/update.sh, um awk
+# que lê `create policy X on public.T` numa linha só): ela erra calada aqui. Há
+# 53 `create policy` no baseline.sql com o nome sozinho na linha e o `on` na de
+# baixo, entre eles os restritivos de `conversations` e `messages`; 84 estão em
+# `execute format(...)`; e o recorte dele para no primeiro `;` de fim de linha,
+# que pode ser um comentário dentro da regra.
+#
+# Para cada um desses erros:
+#   1. o comando é o bloco STATEMENT do psql com o mesmo `psql:<arquivo>:<linha>:`
+#      do erro (o psql recortou, ver `anotar_saida`);
+#   2. o nome e a tabela saem do cabeçalho dele, e o catálogo (`pg_policy`,
+#      `pg_trigger` sem os internos) diz se a regra está no banco;
+#   3. está: nada a fazer, e o erro fica (é outro problema, por exemplo o `drop`
+#      que perdeu e deixou a definição antiga);
+#   4. falta: o comando roda sozinho, com ON_ERROR_STOP e a espera curta, em até
+#      TENTATIVAS rodadas (a mesma espera das passadas), e o catálogo é lido de novo.
+#      Voltou: o erro sai da contagem (o comando rodou, como a disputa curada na
+#      2ª passada). Não voltou: o erro vira "regra de isolamento fora do banco" e
+#      vai para o começo da amostra do carimbo, com `erros > 0` e
+#      `em_dia: false` na /health.
+# O cabeçalho que não dá para ler, ou o catálogo que não responde, deixa o erro
+# como está e escreve um AVISO: nunca some calado.
+# Prova: tests/unit/bootstrap-confere-regras.test.ts e a etapa 3c do
+# scripts/ensaio-de-banco.sh. docs/fork/area-de-cobranca.md, seção 8.
+REGRAS=/tmp/regras
+
+# cabecalho_da_regra <arquivo.sql>: "politica|nome|tabela" ou "gatilho|nome|tabela",
+# ou nada quando o comando não tem a forma esperada. Só lê o cabeçalho: o
+# comando que roda é o arquivo inteiro, sem mudança.
+cabecalho_da_regra() {
+  awk '
+    { s = s " " $0 }
+    END {
+      gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s)
+      l = tolower(s)
+      if (match(l, /^create policy /)) tipo = "politica"
+      else if (match(l, /^create (or replace )?(constraint )?trigger /)) tipo = "gatilho"
+      else exit
+      resto = substr(s, RLENGTH + 1)
+      if (substr(resto, 1, 1) == "\"") {
+        nome = ""; i = 2; fim = 0
+        while (i <= length(resto)) {
+          c = substr(resto, i, 1)
+          if (c == "\"") {
+            if (substr(resto, i + 1, 1) == "\"") { nome = nome "\""; i += 2; continue }
+            fim = i; break
+          }
+          nome = nome c; i++
+        }
+        if (!fim || nome == "") exit
+        resto = substr(resto, fim + 1)
+      } else {
+        if (!match(resto, /^[^ "(]+/)) exit
+        nome = tolower(substr(resto, 1, RLENGTH)); resto = substr(resto, RLENGTH + 1)
+      }
+      lr = tolower(resto)
+      if (tipo == "politica") { if (!match(lr, /^ on /)) exit; resto = substr(resto, 5) }
+      else { p = index(lr, " on "); if (!p) exit; resto = substr(resto, p + 4) }
+      if (tolower(substr(resto, 1, 5)) == "only ") resto = substr(resto, 6)
+      if (!match(resto, /^[^ (;]+/)) exit
+      print tipo "|" nome "|" substr(resto, 1, RLENGTH)
+    }
+  ' "$1"
+}
+
+# regra_no_banco <tipo> <nome> <tabela>: "1" (está), "0" (falta) ou nada (o
+# catálogo não respondeu). Os valores vão por variável do psql, nunca colados.
+regra_no_banco() {
+  if [ "$1" = politica ]; then
+    consulta="select count(*) from pg_catalog.pg_policy where polname = :'nome' and polrelid = to_regclass(:'tabela');"
+  else
+    consulta="select count(*) from pg_catalog.pg_trigger where not tgisinternal and tgname = :'nome' and tgrelid = to_regclass(:'tabela');"
+  fi
+  printf '%s\n' "$consulta" | psql "$DB" -tA -v nome="$2" -v tabela="$3" -f - 2>/dev/null | tr -d '[:space:]' || true
+}
+
+# trocar_erro <chave> <linha nova>: tira de `inesperados` a linha do erro daquela
+# chave (`psql:<arquivo>:<linha>:`) e põe a nova no lugar (nada = só tira).
+trocar_erro() {
+  inesperados="$(printf '%s\n' "$inesperados" | CHAVE="$1 ERROR:" NOVA="$2" awk '
+    !feito && index($0, ENVIRON["CHAVE"]) == 1 { feito = 1; if (ENVIRON["NOVA"] != "") print ENVIRON["NOVA"]; next }
+    { print }
+  ' | grep . || true)"
+}
+
+conferir_regras() {
+  rm -rf "$REGRAS"
+  mkdir -p "$REGRAS"
+  printf '%s\n' "$inesperados" | sed -n 's/^\(psql:[^:]*:[0-9][0-9]*:\) ERROR:.*/\1/p' > "$REGRAS/chaves"
+  [ -s "$REGRAS/chaves" ] || return 0
+  # Um arquivo por comando de política ou gatilho que perdeu: N.sql (o comando,
+  # do jeito que o psql mandou) e N.chave.
+  CHAVES="$REGRAS/chaves" DIR="$REGRAS" awk '
+    BEGIN { while ((getline l < ENVIRON["CHAVES"]) > 0) quero[l] = 1 }
+    /^psql:[^:]*:[0-9]+: STATEMENT:  / {
+      if (arq != "") close(arq)
+      arq = ""
+      chave = $0; sub(/ STATEMENT:  .*/, "", chave)
+      texto = $0; sub(/^psql:[^:]*:[0-9]+: STATEMENT:  /, "", texto)
+      if ((chave in quero) && tolower(texto) ~ /^[ \t]*create[ \t]+(policy|(or[ \t]+replace[ \t]+)?(constraint[ \t]+)?trigger)([ \t]|$)/) {
+        n++
+        print chave > (ENVIRON["DIR"] "/" n ".chave"); close(ENVIRON["DIR"] "/" n ".chave")
+        arq = ENVIRON["DIR"] "/" n ".sql"
+        print texto > arq
+      }
+      next
+    }
+    arq != "" { print > arq }
+  ' "$COMANDOS_PASSADA"
+  ls "$REGRAS"/*.sql > /dev/null 2>&1 || { log "regras de isolamento: nenhuma política ou gatilho perdeu na última passada"; return 0; }
+
+  : > "$REGRAS/faltam"
+  : > "$REGRAS/feitas"
+  for sql in "$REGRAS"/*.sql; do
+    n="${sql%.sql}"
+    chave="$(cat "$n.chave")"
+    cab="$(cabecalho_da_regra "$sql")"
+    if [ -z "$cab" ]; then
+      log "AVISO: não li o nome da regra do comando em ${chave#psql:} (fica como erro)"
+      continue
+    fi
+    tipo="${cab%%|*}"; resto="${cab#*|}"; nome="${resto%%|*}"; tabela="${resto#*|}"
+    rotulo="$( [ "$tipo" = politica ] && printf 'política' || printf 'gatilho' ) ${nome} em ${tabela}"
+    printf '%s\n' "$rotulo" > "$n.rotulo"
+    printf '%s|%s|%s\n' "$tipo" "$nome" "$tabela" > "$n.cab"
+    case "$(regra_no_banco "$tipo" "$nome" "$tabela")" in
+      0) printf '%s\n' "$n" >> "$REGRAS/faltam" ;;
+      1) log "regras de isolamento: ${rotulo} está no banco (o erro em ${chave#psql:} é outro e fica)" ;;
+      *) log "AVISO: não li o catálogo para ${rotulo} (o erro fica)" ;;
+    esac
+  done
+  [ -s "$REGRAS/faltam" ] || return 0
+
+  log "regras de isolamento: $(grep -c . "$REGRAS/faltam") fora do banco depois da última passada; recriando só essas, do próprio arquivo"
+  rodada=1
+  while [ -s "$REGRAS/faltam" ]; do
+    : > "$REGRAS/de-novo"
+    while read -r n; do
+      rc=0
+      psql "$DB" -q -v ON_ERROR_STOP=1 -c "$ESPERA_CURTA" -f "$n.sql" < /dev/null > "$n.saida" 2>&1 || rc=$?
+      if [ "$rc" -ne 0 ] && [ "$rodada" -lt "$TENTATIVAS" ] && grep -qiE "$DISPUTA" "$n.saida"; then
+        printf '%s\n' "$n" >> "$REGRAS/de-novo"
+      else
+        printf '%s\n' "$n" >> "$REGRAS/feitas"
+      fi
+    done < "$REGRAS/faltam"
+    mv "$REGRAS/de-novo" "$REGRAS/faltam"
+    [ -s "$REGRAS/faltam" ] || break
+    espera=$((ESPERA_S * rodada))
+    log "regras de isolamento: $(grep -c . "$REGRAS/faltam") perderam a disputa de novo; tento outra vez em ${espera} s"
+    sleep "$espera"
+    rodada=$((rodada + 1))
+  done
+
+  while read -r n; do
+    chave="$(cat "$n.chave")"; rotulo="$(cat "$n.rotulo")"; cab="$(cat "$n.cab")"
+    tipo="${cab%%|*}"; resto="${cab#*|}"; nome="${resto%%|*}"; tabela="${resto#*|}"
+    if [ "$(regra_no_banco "$tipo" "$nome" "$tabela")" = 1 ]; then
+      log "regras de isolamento: ${rotulo} voltou ao banco"
+      trocar_erro "$chave" ""
+    else
+      motivo="$(grep -iE 'ERROR|FATAL|lock timeout|deadlock' "$n.saida" | head -1 | sed 's/^psql:[^ ]* //' || true)"
+      log "AVISO: regras de isolamento: ${rotulo} continua FORA do banco (${motivo:-o psql não disse por quê})"
+      trocar_erro "$chave" "regra de isolamento fora do banco: ${rotulo} (o create de ${chave#psql:} perdeu e não voltou: ${motivo:-sem motivo no psql})"
+    fi
+  done < "$REGRAS/feitas"
 }
 
 if [ "${existentes:-0}" -gt 0 ]; then
@@ -235,6 +440,7 @@ if [ "${existentes:-0}" -gt 0 ]; then
     passada=$((passada + 1))
   done
   cp "$LOG_PASSADA" /tmp/baseline.log 2>/dev/null || true
+  conferir_regras
   if [ -n "$inesperados" ]; then
     log "AVISO: erros que não são os esperados (o app sobe mesmo assim):"
     printf '%s\n' "$inesperados" | head -20
@@ -261,7 +467,9 @@ if [ "${existentes:-0}" -gt 0 ]; then
   # A amostra começa pelo que NÃO é disputa: é o que precisa de conserto, e
   # numa lista de disputas ficaria fora do corte de 3.
   n_erros="$(printf '%s' "$inesperados" | grep -c . || true)"
-  amostra="$( { printf '%s\n' "$inesperados" | grep -viE "$DISPUTA"; printf '%s\n' "$inesperados" | grep -iE "$DISPUTA"; } | grep . | head -3 | cut -c1-500 || true)"
+  # A regra de isolamento fora do banco vem antes de tudo (MIA-354).
+  FORA='^regra de isolamento fora do banco'
+  amostra="$( { printf '%s\n' "$inesperados" | grep -E "$FORA"; printf '%s\n' "$inesperados" | grep -vE "$FORA" | grep -viE "$DISPUTA"; printf '%s\n' "$inesperados" | grep -vE "$FORA" | grep -iE "$DISPUTA"; } | grep . | head -3 | cut -c1-500 || true)"
   psql "$DB" -q -v ON_ERROR_STOP=1 -v n="${n_erros:-0}" -v amostra="$amostra" <<'SQL' >/dev/null 2>&1 || true
 update public.schema_baseline
    set erros_inesperados = :'n'::integer,

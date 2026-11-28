@@ -21,6 +21,9 @@
 #      sob disputa provocada por uma sessão que segura lock em public.conversations
 #      (MIA-348): disputa curta cura na 2ª passada sem prender o app; disputa que não
 #      acaba vira erro no carimbo, e some na rodada seguinte.
+#   3c. o bootstrap de verdade com o `create` de uma política restritiva de
+#      public.conversations perdendo a disputa nas 3 passadas (o `drop` ganha): a
+#      conferência das regras a recria do arquivo, igual, e o carimbo fica com 0 (MIA-354).
 #
 # Uso:
 #   scripts/ensaio-de-banco.sh \
@@ -375,13 +378,16 @@ BOOT() {
     -e OWNER_EMAIL= -e OWNER_PASSWORD= -e CPF_ENCRYPTION_KEY= \
     "$C" sh /deskcomm/bootstrap.sh
 }
-# segurar_lock <segundos>: em segundo plano, com application_name para achar e soltar.
+# segurar_lock <segundos> [tabela] [modo]: em segundo plano, com application_name para
+# achar e soltar. O padrão é `access share` em public.conversations (3b); a 3c segura
+# outra tabela.
 segurar_lock() {
+  local tabela="${2:-public.conversations}" modo="${3:-access share}"
   docker exec -e PGAPPNAME=ensaio-trava "$C" psql -U supabase_admin -h 127.0.0.1 -d postgres -q \
-    -c "begin; lock table public.conversations in access share mode; select pg_sleep($1); commit;" >/dev/null 2>&1 &
+    -c "begin; lock table $tabela in $modo mode; select pg_sleep($1); commit;" >/dev/null 2>&1 &
   TRAVA=$!
   for _ in $(seq 1 50); do
-    [ "$(PSQL -tAc "select count(*) from pg_locks l join pg_stat_activity a on a.pid = l.pid where a.application_name = 'ensaio-trava' and l.relation = 'public.conversations'::regclass and l.granted" 2>/dev/null)" = 1 ] && return 0
+    [ "$(PSQL -tAc "select count(*) from pg_locks l join pg_stat_activity a on a.pid = l.pid where a.application_name = 'ensaio-trava' and l.relation = '$tabela'::regclass and l.granted" 2>/dev/null)" = 1 ] && return 0
     sleep 0.2
   done
   return 1
@@ -463,6 +469,61 @@ else
   soltar_lock
   conferir 0 "3b caso 3: a sessão que segura o lock não pegou o lock"
 fi
+
+echo "== 3c. a regra restritiva que o drop tirou e o create não devolveu volta do arquivo (MIA-354)"
+# O buraco que sobra da espera curta: na última passada, o `drop policy if exists`
+# ganha a disputa e o `create policy` perde, e a regra fica fora do banco. Uma
+# restritiva faltando AMPLIA o acesso. Apagar a regra à mão antes do bootstrap não
+# provaria nada: a passada a recria sozinha. Então a disputa é provocada só no
+# `create` dela: um gatilho de evento do ensaio (`ddl_command_start`, CREATE POLICY)
+# tenta um lock numa tabela que outra sessão segura, nas 3 primeiras vezes em que o
+# comando dela chega (contadas por uma sequência, que não volta no rollback). Nas 3
+# passadas o `drop` ganha e o `create` perde por lock timeout de verdade; a 4ª vez
+# é a da conferência das regras, que tem de trazê-la de volta. Nada depende de sorte.
+REGRA_3C=conversation_participant_read_is_not_control_update
+DEF_3C="select polpermissive::text || '|' || polcmd || '|' || array_to_string(polroles::regrole[], ',') || '|' || coalesce(pg_get_expr(polqual, polrelid), '') || '|' || coalesce(pg_get_expr(polwithcheck, polrelid), '') from pg_policy where polname = '$REGRA_3C' and polrelid = 'public.conversations'::regclass"
+DEF_ANTES_3C=$(PSQL -tAc "$DEF_3C" 2>&1)
+if [ "${DEF_ANTES_3C%%|*}" != false ]; then
+  conferir 0 "3c: a política restritiva $REGRA_3C não está em public.conversations" "o baseline.sql mudou? Troque REGRA_3C por outra restritiva de conversations criada fora de \`do \$\$\`. Lido: $(printf '%s' "$DEF_ANTES_3C" | cut -c1-200)"
+elif ! PSQL -v ON_ERROR_STOP=1 -q >"$LOGS/preparo-3c.log" 2>&1 <<SQL
+create schema ensaio_3c;
+create table ensaio_3c.trava (x int);
+create sequence ensaio_3c.vezes;
+create function ensaio_3c.perde() returns event_trigger language plpgsql as \$\$
+begin
+  if current_query() ~* 'create\s+policy\s+${REGRA_3C}\M' and nextval('ensaio_3c.vezes') <= 3 then
+    lock table ensaio_3c.trava in access share mode;
+  end if;
+end \$\$;
+create event trigger ensaio_3c_perde on ddl_command_start when tag in ('CREATE POLICY') execute function ensaio_3c.perde();
+SQL
+then
+  conferir 0 "3c: o preparo (gatilho de evento do ensaio) falhou" "$(grep -iE 'ERROR' "$LOGS/preparo-3c.log" | head -2 | cut -c1-200 | tr '\n' ';')"
+elif segurar_lock 900 ensaio_3c.trava "access exclusive"; then
+  BOOT >"$LOGS/bootstrap-3c.log" 2>&1; RC3C=$?
+  soltar_lock
+  VEZES_3C=$(PSQL -tAc "select last_value from ensaio_3c.vezes" 2>&1)
+  DEF_DEPOIS_3C=$(PSQL -tAc "$DEF_3C" 2>&1)
+  DEPOIS_3C=$(PSQL -tAc "$CARIMBO_SQL" 2>&1)
+  IFS='|' read -r _ erros3c _ <<<"$DEPOIS_3C"
+  if [ "$RC3C" = 0 ]; then conferir 1 "3c: o bootstrap sai 0"
+  else conferir 0 "3c: o bootstrap saiu $RC3C" "$(tail -3 "$LOGS/bootstrap-3c.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if grep -q "passada 3 de 3: .* perderam a disputa, e acabaram as passadas" "$LOGS/bootstrap-3c.log" \
+     && grep -q "regras de isolamento: 1 fora do banco depois da última passada" "$LOGS/bootstrap-3c.log"; then
+    conferir 1 "3c: o create perdeu nas 3 passadas e a regra ficou fora do banco" "$VEZES_3C vez(es) o comando chegou"
+  else conferir 0 "3c: a disputa provocada não deixou a regra fora do banco" "$(grep -E 'passada|regras de isolamento' "$LOGS/bootstrap-3c.log" | cut -c1-200 | tr '\n' ';')"; fi
+  if grep -q "política $REGRA_3C em public.conversations voltou ao banco" "$LOGS/bootstrap-3c.log" && [ "$VEZES_3C" = 4 ]; then
+    conferir 1 "3c: a conferência das regras recriou só ela, do arquivo"
+  else conferir 0 "3c: a regra não voltou pela conferência" "vezes: ${VEZES_3C:-?} · $(grep -E 'regras de isolamento' "$LOGS/bootstrap-3c.log" | cut -c1-300 | tr '\n' ';')"; fi
+  if [ "$DEF_DEPOIS_3C" = "$DEF_ANTES_3C" ]; then conferir 1 "3c: voltou restritiva e com a mesma definição (comando, papéis, using, with check)"
+  else conferir 0 "3c: a definição da regra mudou" "antes: $(printf '%s' "$DEF_ANTES_3C" | cut -c1-200) · depois: $(printf '%s' "$DEF_DEPOIS_3C" | cut -c1-200)"; fi
+  if [ "$erros3c" = 0 ]; then conferir 1 "3c: o carimbo ficou com 0 erros"
+  else conferir 0 "3c: erros_inesperados = ${erros3c:-?}" "$(PSQL -tAc "$AMOSTRA_SQL" 2>&1 | cut -c1-300 | tr '\n' ';')"; fi
+else
+  soltar_lock
+  conferir 0 "3c: a sessão que segura o lock não pegou o lock"
+fi
+PSQL -q -c "drop event trigger if exists ensaio_3c_perde" -c "drop schema if exists ensaio_3c cascade" >/dev/null 2>&1
 
 echo
 if [ "$FALHAS" = 0 ]; then echo "RESULTADO: ensaio verde (todas as conferências passaram)"; else echo "RESULTADO: ensaio VERMELHO ($FALHAS conferência(s) falharam)"; fi
