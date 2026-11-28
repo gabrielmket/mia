@@ -127,7 +127,8 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
       // MIA-169: garantir e testar as conversões do site. MIA-28: as três da coexistência do WhatsApp (ver, ligar e a sincronização do app).
       // MIA-218: ver a IA das empresas.
       // MIA-309: o teto de IA de uma empresa.
-      (f) => daCobranca.has(f.name) || /analise_do_funil|conversas_do_mes|consumo_de_ia|coexistencia|sincronizacao_do_app|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp|modulo_da_empresa|tela_inicial|precos_da_meta|conversoes_do_site|ia_das_empresas|teto_de_ia/.test(f.name),
+      // MIA-358: ver as versões de um agente e voltar para uma anterior.
+      (f) => daCobranca.has(f.name) || /analise_do_funil|conversas_do_mes|consumo_de_ia|coexistencia|sincronizacao_do_app|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp|modulo_da_empresa|tela_inicial|precos_da_meta|conversoes_do_site|ia_das_empresas|teto_de_ia|versoes_do_agente|reverter_agente/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });
