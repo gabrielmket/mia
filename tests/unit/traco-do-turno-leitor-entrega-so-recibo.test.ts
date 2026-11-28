@@ -5,9 +5,13 @@ import { GET } from "@/app/api/v1/ai/turn-traces/route";
 import { COLUNAS_DO_TRACO } from "@/lib/agent-engine/agent/recibo-do-traco";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// FORK MIA (MIA-251 G): desde a 9175 a plataforma lê o traço pelo cliente admin;
+// o gerente, pela sessão. O mesmo banco falso responde pelos dois.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { AI_TELEMETRY_RETENTION_DAYS: undefined } }));
 
 const ID = "b3201000-0000-4000-8000-000000000001";
@@ -19,6 +23,12 @@ function banco(data: unknown[], error: unknown = null) {
   for (const metodo of ["select", "eq", "gte", "lt", "order", "limit"]) query[metodo] = () => query;
   query.then = (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error }).then(resolve);
   return { from: () => query };
+}
+
+/** FORK MIA (MIA-251 G): o mesmo banco falso pela sessão e pelo cliente admin. */
+function usarBanco(cliente: unknown) {
+  vi.mocked(createClient).mockResolvedValue(cliente as never);
+  vi.mocked(createAdminClient).mockReturnValue(cliente as never);
 }
 
 beforeEach(() => {
@@ -37,7 +47,7 @@ const pedir = () => GET(new NextRequest("http://localhost/api/v1/ai/turn-traces"
 
 describe("o leitor entrega recibos e não o texto livre guardado no legado", () => {
   it("projeta conteúdo técnico e remove PII, segredo e chaves JSON arbitrárias", async () => {
-    vi.mocked(createClient).mockResolvedValue(
+    usarBanco(
       banco([
         {
           id: ID,
@@ -112,7 +122,7 @@ describe("o leitor entrega recibos e não o texto livre guardado no legado", () 
   });
 
   it("um código livre não vira recibo só por caber em uma string", async () => {
-    vi.mocked(createClient).mockResolvedValue(
+    usarBanco(
       banco([
         {
           id: ID,
@@ -135,7 +145,7 @@ describe("o leitor entrega recibos e não o texto livre guardado no legado", () 
   });
 
   it("um erro de consulta retorna fail genérico sem ecoar valores de banco", async () => {
-    vi.mocked(createClient).mockResolvedValue(
+    usarBanco(
       banco([], { message: `${PESSOAL} ${SEGREDO}` }) as never,
     );
     const resposta = await pedir();
@@ -148,6 +158,9 @@ describe("o leitor entrega recibos e não o texto livre guardado no legado", () 
 
   it("uma exceção inesperada de consulta também respeita a resposta canônica", async () => {
     vi.mocked(createClient).mockRejectedValue(new Error(`${PESSOAL} ${SEGREDO}`));
+    vi.mocked(createAdminClient).mockImplementation(() => {
+      throw new Error(`${PESSOAL} ${SEGREDO}`);
+    });
     const resposta = await pedir();
     expect(resposta.status).toBe(500);
     const payload = await resposta.json();
@@ -164,7 +177,7 @@ describe("FORK MIA (MIA-262): o gerente da empresa recebe o recibo sem a IA da p
       user: { id: ID, idioma: "pt-BR", is_platform_admin: false, support: null },
       org: { orgId: ID, role: "manager" },
     } as never);
-    vi.mocked(createClient).mockResolvedValue(
+    usarBanco(
       banco([
         {
           id: ID,

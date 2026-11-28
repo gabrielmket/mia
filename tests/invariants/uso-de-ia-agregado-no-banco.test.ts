@@ -69,6 +69,13 @@ function usoComo(papel: "authenticated" | "dono", org: string, purpose: string |
 }
 
 beforeAll(() => {
+  // FORK MIA (MIA-251 G): desde a 9175 a sessão não lê custo nem tokens de
+  // `llm_calls`, e a rota chama `fn_uso_de_ia` pelo cliente admin depois do portão
+  // da plataforma (tests/invariants/custo-de-ia-a-sessao-nao-le.test.ts prova as
+  // duas coisas). Este arquivo mede a FUNÇÃO do upstream como ele a desenhou (a
+  // soma e o isolamento pela RLS de quem chama), então devolve o SELECT da tabela
+  // à sessão só neste banco, que é descartado no fim do arquivo.
+  sql(`grant select on table public.llm_calls to authenticated;`);
   sql(`
     insert into auth.users (id, email) values ('${USUARIO_A}', 'uso-ia-a-${USUARIO_A}@invariant.test');
     insert into organizations (id, slug, legal_name, display_name) values

@@ -18,8 +18,8 @@ import { lastLine, sql } from "./gov-helpers";
  *      (`lib/lgpd/cascata.ts`), e ela continua gravando;
  *   3. o servidor continua gravando o custo: `service_role` (o cliente admin) e o
  *      dono das tabelas (o pool do motor);
- *   4. a leitura não muda nesta migration (os passos 2, 4 e 5 do desenho da
- *      MIA-285 são outra subtarefa);
+ *   4. a leitura das colunas abertas continua (desde a 9175 ela é coluna por
+ *      coluna, sem custo, tokens, provedor e modelo: custo-de-ia-a-sessao-nao-le.test.ts);
  *   5. o `GRANT ALL` do corpo do baseline do upstream, que volta a cada
  *      implantação, é fechado de novo por `fn_mia_colunas_de_ia_fechadas()`.
  *   6. o suporte em modo somente leitura segue travado no `tool_calls` pela
@@ -107,9 +107,11 @@ describe("9173 · o custo de IA só o servidor grava", () => {
     for (const coluna of ["cost_cents", "tokens_in", "tokens_out", "status"]) {
       expect.soft(privilegioDaColuna("authenticated", "ai_agent_runs", coluna, "UPDATE"), coluna).toBe(false);
     }
-    // A leitura fica como estava (passo 2 do desenho é outra subtarefa).
-    expect(privilegio("authenticated", "llm_calls", "SELECT")).toBe(true);
-    expect(privilegio("authenticated", "ai_agent_runs", "SELECT")).toBe(true);
+    // A leitura das colunas abertas continua. Desde a 9175 (MIA-251 G) ela é coluna
+    // por coluna: a tabela inteira não, o status sim (custo-de-ia-a-sessao-nao-le.test.ts).
+    expect(privilegio("authenticated", "llm_calls", "SELECT")).toBe(false);
+    expect(privilegioDaColuna("authenticated", "llm_calls", "status", "SELECT")).toBe(true);
+    expect(privilegioDaColuna("authenticated", "ai_agent_runs", "status", "SELECT")).toBe(true);
     // E o servidor continua gravando.
     expect(privilegio("service_role", "llm_calls", "INSERT")).toBe(true);
     expect(privilegio("service_role", "ai_agent_runs", "UPDATE")).toBe(true);

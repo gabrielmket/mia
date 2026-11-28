@@ -21,11 +21,16 @@ import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM } from "@/lib/ai/pontos/resolver";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ehColunaDeIaFechada, nomeDaColuna } from "@/lib/ai/colunas-de-ia-fechadas";
 
 import { GET } from "./route";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// FORK MIA (MIA-251 G): desde a 9175 quem vê a IA da plataforma lê pelo cliente
+// admin; o cliente lê pela sessão, sem as colunas fechadas.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 // FORK MIA (MIA-262): provedor, modelo e tokens são da plataforma. Os casos da
 // rota leem como o admin dela; o cliente está no bloco do fim do arquivo.
 const quem = vi.hoisted(() => ({ atual: { is_platform_admin: true, platform_admin_scope: "full", support: null } as Record<string, unknown> }));
@@ -55,18 +60,25 @@ function linha(over: Record<string, unknown>) {
 
 let filtros: Array<[string, unknown]>;
 let linhas: ReturnType<typeof linha>[];
+/** FORK MIA (MIA-251 G): por qual cliente a leitura foi, e com que colunas. */
+let leituras: Array<{ cliente: "sessao" | "admin"; colunas: string }>;
 
 beforeEach(() => {
   filtros = [];
   linhas = [];
+  leituras = [];
   quem.atual = { is_platform_admin: true, platform_admin_scope: "full", support: null };
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     user: { id: "u", idioma: "pt-BR" },
     org: { orgId: ORG, role: "manager" },
   } as unknown as Awaited<ReturnType<typeof requireRole>>);
+  let cliente: "sessao" | "admin" = "sessao";
   const chain = {
-    select: () => chain,
+    select: (colunas: string) => {
+      leituras.push({ cliente, colunas });
+      return chain;
+    },
     order: () => chain,
     limit: () => chain,
     eq: (coluna: string, valor: unknown) => {
@@ -82,9 +94,18 @@ beforeEach(() => {
   vi.mocked(createClient).mockResolvedValue({
     from: (tabela: string) => {
       expect(tabela).toBe("llm_calls");
+      cliente = "sessao";
       return chain;
     },
   } as unknown as Awaited<ReturnType<typeof createClient>>);
+  vi.mocked(createAdminClient).mockClear();
+  vi.mocked(createAdminClient).mockReturnValue({
+    from: (tabela: string) => {
+      expect(tabela).toBe("llm_calls");
+      cliente = "admin";
+      return chain;
+    },
+  } as unknown as ReturnType<typeof createAdminClient>);
 });
 
 async function pedir(query = "") {
@@ -372,5 +393,34 @@ describe("FORK MIA (MIA-262): o cliente vê a execução sem a IA da plataforma"
     quem.atual = { is_platform_admin: false, platform_admin_scope: null, support: null };
     await pedir("?provider=anthropic");
     expect(filtros.some(([coluna]) => coluna === "provider")).toBe(false);
+  });
+});
+
+describe("FORK MIA (MIA-251 G): custo, tokens, provedor e modelo não saem pela sessão (9175)", () => {
+  const fechadas = (colunas: string) =>
+    colunas.split(",").map(nomeDaColuna).filter(ehColunaDeIaFechada);
+
+  it("a plataforma lê pelo cliente admin, com as colunas dela e o filtro da organização", async () => {
+    await pedir();
+    expect(leituras).toHaveLength(1);
+    expect(leituras[0]?.cliente).toBe("admin");
+    expect(fechadas(leituras[0]?.colunas ?? "")).toEqual(
+      expect.arrayContaining(["provider", "model", "input_tokens", "output_tokens", "cost_cents"]),
+    );
+    expect(filtros).toContainEqual(["organization_id", ORG]);
+  });
+
+  it.each([
+    ["o gerente da empresa", { is_platform_admin: false, platform_admin_scope: null, support: null }],
+    ["a plataforma em suporte", { is_platform_admin: true, platform_admin_scope: "full", support: { organization_id: ORG } }],
+  ])("%s lê pela sessão, sem nenhuma coluna fechada; status, erro e tempo ficam", async (_nome, usuario) => {
+    quem.atual = usuario;
+    await pedir("?provider=typesafe");
+    expect(leituras).toHaveLength(1);
+    expect(leituras[0]?.cliente).toBe("sessao");
+    expect(fechadas(leituras[0]?.colunas ?? "")).toEqual([]);
+    expect(leituras[0]?.colunas).toMatch(/\bstatus\b.*\berror_code\b.*\blatency_ms\b/);
+    expect(filtros.some(([coluna]) => coluna === "or" || coluna === "provider")).toBe(false);
+    expect(createAdminClient).not.toHaveBeenCalled();
   });
 });

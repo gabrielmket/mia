@@ -16,6 +16,8 @@
 #        - fn_mia_*, trg_mia_*, políticas mia_*, tabelas mia_* e gatilhos trg_mia_demonstracao*
 #          não diminuem;
 #        - 0 tabela mia_* sem RLS;
+#        - custo de IA: a sessão não grava (9173) nem lê custo, tokens, provedor e modelo
+#          (9175), e o Realtime de ai_agent_runs segue entregando a linha sem eles;
 #        - as demonstrações geradas pelo código NOVO reaplicam com saída 0.
 #
 # Uso:
@@ -338,6 +340,111 @@ done <<EOF
 $(printf '%s\n' "$CUSTO" | grep -F 'CUSTO|')
 EOF
 [ "$N_CUSTO" -gt 0 ] || conferir 0 "custo de IA (9173): a sonda não rodou" "$(printf '%s' "$CUSTO" | head -3 | cut -c1-200 | tr '\n' ';')"
+
+# 9175 (MIA-251 G): com a sessão de um membro, custo, tokens, provedor e modelo de
+# IA não se leem nas três tabelas (nem por `fn_uso_de_ia`); status, erro e tempo
+# sim; o servidor lê tudo; e o Realtime de `ai_agent_runs` segue entregando a
+# linha sem as colunas fechadas (a chave primária aberta, que é o que
+# `realtime.apply_rls` exige, e o registro montado só com o que o papel lê).
+LEITURA=$(PSQL -tA 2>&1 <<'SQL'
+do $$
+declare
+  v_uid uuid;
+  v_org uuid;
+  r record;
+  res text;
+  v_cols text;
+  v_reg jsonb;
+begin
+  select uo.user_id, uo.organization_id into v_uid, v_org
+    from public.user_organizations uo
+   where uo.accepted_at is not null
+   order by (uo.role = 'admin') desc, uo.organization_id
+   limit 1;
+  v_org := coalesce(v_org, (select o.id from public.organizations o order by o.id limit 1));
+  v_uid := coalesce(v_uid, gen_random_uuid());
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  for r in
+    select * from (values
+      ('membro: select llm_calls.cost_cents', 'authenticated', 'select cost_cents from public.llm_calls limit 1', 'negado'),
+      ('membro: select llm_calls.input_tokens', 'authenticated', 'select input_tokens from public.llm_calls limit 1', 'negado'),
+      ('membro: select llm_calls.provider, model', 'authenticated', 'select provider, model from public.llm_calls limit 1', 'negado'),
+      ('membro: select * de llm_calls', 'authenticated', 'select * from public.llm_calls limit 1', 'negado'),
+      ('membro: select agent_turn_traces.cost_cents', 'authenticated', 'select cost_cents from public.agent_turn_traces limit 1', 'negado'),
+      ('membro: select agent_turn_traces.provider, model, tokens_in', 'authenticated', 'select provider, model, tokens_in from public.agent_turn_traces limit 1', 'negado'),
+      ('membro: select ai_agent_runs.cost_cents, tokens_out', 'authenticated', 'select cost_cents, tokens_out from public.ai_agent_runs limit 1', 'negado'),
+      ('membro: filtro por input_tokens', 'authenticated', 'select count(*) from public.llm_calls where input_tokens > 0', 'negado'),
+      ('membro: fn_uso_de_ia', 'authenticated',
+       format('select public.fn_uso_de_ia(%L, now() - interval %L, now(), null, null)', v_org, '30 days'), 'negado'),
+      ('membro: select id, status, error_code, latency_ms de llm_calls', 'authenticated',
+       format('select id, status, error_code, latency_ms from public.llm_calls where organization_id = %L limit 5', v_org), 'lê'),
+      ('membro: select id, status de agent_turn_traces', 'authenticated',
+       format('select id, status from public.agent_turn_traces where organization_id = %L limit 5', v_org), 'lê'),
+      ('membro: select id, status, tool_calls de ai_agent_runs', 'authenticated',
+       format('select id, status, tool_calls from public.ai_agent_runs where organization_id = %L limit 5', v_org), 'lê'),
+      ('servidor: select de custo, tokens, provedor e modelo (service_role)', 'service_role',
+       'select cost_cents, input_tokens, provider, model from public.llm_calls limit 1', 'lê'),
+      ('servidor: fn_uso_de_ia (service_role)', 'service_role',
+       format('select public.fn_uso_de_ia(%L, now() - interval %L, now(), null, null)', v_org, '30 days'), 'lê')
+    ) t(nome, papel, comando, esperado)
+  loop
+    begin
+      execute format('set local role %I', r.papel);
+      execute r.comando;
+      raise exception using errcode = 'P0001', message = 'desfaz';
+    exception
+      when insufficient_privilege then
+        res := case when sqlerrm like 'permission denied%' then 'negado' else 'rls: ' || sqlerrm end;
+      when sqlstate 'P0001' then
+        res := 'lê';
+      when others then
+        res := 'erro ' || sqlstate || ': ' || sqlerrm;
+    end;
+    raise notice 'LEITURA|%|%|%', case when res = r.esperado then 'ok' else 'FALHOU' end, r.nome, res;
+  end loop;
+
+  -- Realtime: publicada, chave primária legível, registro sem as fechadas.
+  res := case when exists (select 1 from pg_publication_tables
+                            where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'ai_agent_runs')
+              then 'publicada' else 'fora da publicação' end;
+  if (select bool_and(has_column_privilege('authenticated', c.conrelid, a.attname, 'SELECT'))
+        from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
+       where c.conrelid = 'public.ai_agent_runs'::regclass and c.contype = 'p') is not true then
+    res := res || ', chave primária sem SELECT (o Realtime responderia 401)';
+  end if;
+  select string_agg(quote_ident(a.attname), ', ' order by a.attnum) into v_cols
+    from pg_attribute a
+   where a.attrelid = 'public.ai_agent_runs'::regclass and a.attnum > 0 and not a.attisdropped
+     and has_column_privilege('authenticated', a.attrelid, a.attname, 'SELECT');
+  if v_cols ~ '(cost_cents|tokens)' then
+    res := res || ', o registro levaria coluna fechada';
+  end if;
+  -- O registro como o membro o leria, sob a RLS dele (vazio se a demonstração não tem execução).
+  begin
+    execute 'set local role authenticated';
+    execute format('select to_jsonb(r) from (select %s from public.ai_agent_runs where organization_id = %L limit 1) r', v_cols, v_org)
+      into v_reg;
+    raise exception using errcode = 'P0001', message = 'desfaz';
+  exception
+    when sqlstate 'P0001' then null;
+    when others then res := res || ', registro: ' || sqlerrm;
+  end;
+  raise notice 'LEITURA|%|%|%',
+    case when res = 'publicada' then 'ok' else 'FALHOU' end,
+    'Realtime de ai_agent_runs: a linha chega sem custo e tokens', res || ' (' || coalesce(v_cols, '?') || ')';
+end $$;
+SQL
+)
+N_LEITURA=0
+while IFS='|' read -r _ ok nome res; do
+  [ -n "$nome" ] || continue
+  N_LEITURA=$((N_LEITURA + 1))
+  if [ "$ok" = ok ]; then conferir 1 "leitura de IA (9175) · $nome" "$(printf '%s' "$res" | cut -c1-160)"
+  else conferir 0 "leitura de IA (9175) · $nome" "$res"; fi
+done <<EOF
+$(printf '%s\n' "$LEITURA" | grep -F 'LEITURA|')
+EOF
+[ "$N_LEITURA" -gt 0 ] || conferir 0 "leitura de IA (9175): a sonda não rodou" "$(printf '%s' "$LEITURA" | head -3 | cut -c1-200 | tr '\n' ';')"
 
 for seg in $SEGMENTOS; do
   if ARQ -v ON_ERROR_STOP=1 -f "/ensaio/demos-novo/demo-$seg.sql" >"$LOGS/demo-novo-$seg.log" 2>&1; then
