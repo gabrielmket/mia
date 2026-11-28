@@ -199,17 +199,27 @@ diff /tmp/marc-antes.txt /tmp/marc-depois.txt        # linha com contagem MENOR 
 
 Arquivos do upstream que levam encaixe de **várias** funções (confira primeiro, quase toda fusão
 os toca): `lib/audit/actions.ts` (códigos de auditoria `*.` das funções), `lib/i18n/dicionario.ts`
-(uma linha que espalha cada `lib/i18n/dicionario-mia-*.ts`), `lib/auth/public-paths.ts` (rotas
+(as frases das funções), `lib/auth/public-paths.ts` (rotas
 públicas: preços, preferências de e-mail, raio-X, consultas de cupom), `lib/navigation/catalogo.ts`
 (portas do menu), `lib/mcp-plataforma/ferramentas.ts` e `operacoes.ts`, `lib/lgpd/export-collector.ts`,
 `docker/scheduler/entrypoint.sh`, `components/admin/AdminSidebar.tsx`.
 
+**Desde a MIA-372, os dois primeiros têm um ponto de ligação só.** Nas seções por função, onde se lê
+"`lib/i18n/dicionario.ts` (o dicionário nosso)", leia `lib/i18n/dicionario-mia.ts`:
+
+| Arquivo do upstream | O que sobra de nosso nele | Onde mora o nosso |
+|---|---|---|
+| `lib/i18n/dicionario.ts` | 2 linhas, 2 marcas: o `import { ligarAsFrasesDaMia }` (depois do `import type { Idioma }`) e a chamada `ligarAsFrasesDaMia(DICIONARIO);` logo depois do `};` do objeto | `lib/i18n/dicionario-mia.ts`, o agregador: importa cada `dicionario-mia-*.ts` / `dicionario-*-mia.ts` e junta em `FRASES_DA_MIA` (entra só se o upstream não tiver a chave); `lib/i18n/dicionario-mia-sobreposicoes.ts` (as poucas em que a nossa vence a dele, cada uma com motivo); `lib/i18n/dicionario-mia-avulsas.ts` (as frases que moravam soltas no meio do dicionário dele) |
+| `lib/audit/actions.ts` | 1 bloco, 1 marca: todos os códigos da MIA logo depois de `export const AUDIT_ACTIONS = [`, até a linha `// ── fim do bloco da MIA` | no mesmo arquivo: o upstream proíbe `import` nele (`tests/unit/audit-lista-do-painel-e-derivada.test.tsx`), então o nosso não pode morar em arquivo à parte |
+
+Frase nova: arquivo `dicionario-mia-<assunto>.ts` ligado no agregador, nunca linha no `dicionario.ts`.
+Código de auditoria novo: no fim do bloco da MIA, nunca no meio das linhas do upstream. Conflito
+nos dois arquivos numa fusão: fique com o lado do upstream e recoloque só as 2 linhas do dicionário
+e o bloco das ações.
+
 ```bash
-# cada dicionário nosso continua importado e espalhado
-for f in lib/i18n/dicionario-mia-*.ts lib/i18n/dicionario-cartoes-mia.ts lib/i18n/dicionario-empresas-mia.ts \
-         lib/i18n/dicionario-obrigacoes-mia.ts lib/i18n/dicionario-relatorios-mia.ts; do
-  b=$(basename $f .ts); git grep -q "$b" lib/i18n/dicionario.ts || echo "DICIONÁRIO DESLIGADO: $b"; done
-npx vitest run tests/unit/i18n-espanhol-cobre-a-tela.test.ts
+# o ponto de ligação continua lá, todo arquivo de frases passa por ele, e nenhuma marca nova entrou
+npx vitest run tests/unit/dicionario-mia-ligado.test.ts tests/unit/i18n-espanhol-cobre-a-tela.test.ts
 ```
 
 Duas leituras que o upstream muda sem aviso e desligam função nossa: a lista de rotas públicas
