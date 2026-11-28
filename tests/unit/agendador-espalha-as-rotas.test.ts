@@ -69,7 +69,10 @@ function gerar(): Gerada[] {
   chmodSync(join(bin, "crond"), 0o755);
   const crontab = join(TMP, `crontab-${geracao}`);
   execFileSync("sh", [ENTRYPOINT], {
+    // Ambiente mínimo, sem herdar o da máquina. O `NODE_ENV` vai porque o tipo do
+    // Next (`next/types/global.d.ts`) o exige no `ProcessEnv`; o entrypoint não o lê.
     env: {
+      NODE_ENV: "test",
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       INTERNAL_SECRET: "segredo-do-teste",
       CRONTAB_PATH: crontab,
